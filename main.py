@@ -28,7 +28,6 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 # ML / DB imports
 
 from sentence_transformers import SentenceTransformer
-from transformers import pipeline
 from transformers import logging as hf_logging #hugging face logging
 import numpy as np
 import faiss
@@ -37,7 +36,6 @@ from google.cloud import firestore
 from langdetect import detect, LangDetectException
 from google.oauth2 import service_account
 # Training imports
-from sklearn.linear_model import LogisticRegression
 import pandas as pd
 from google.api_core import exceptions
 from google.cloud.firestore_v1.base_query import FieldFilter
@@ -756,25 +754,12 @@ def predict_intent_prototype(text: str, cached_intent=None, cached_lang=None):
     if has_role(lower_text) and len(words) <= 2 and not any(p in lower_text for p in ["i am", "i'm", "my"]):
         rule_candidates.append(("search", 0.85 * session.get("supply_prior", 1.0), {}))
 
-    # --- STEP 3.6: PREPARE ML CANDIDATE (Moved Up) ---
-    ml_candidate = ("other", 0.0)  # Default if ML fails
-    try:
-        if intent_clf is not None:
-            m = get_embedding_model()
-            emb = m.encode([text])
-            preds = intent_clf.predict(emb)
-            ml_intent = preds if isinstance(preds, (list, np.ndarray)) else preds
-            probs = intent_clf.predict_proba(emb)
-            ml_conf = float(np.max(probs))
-            ml_candidate = (ml_intent, ml_conf)
-    except Exception:
-        pass
 
     # --- MERGE RULE + ML CANDIDATES ---
     # Now ml_candidate is defined and ready for the merge!
     chosen_intent, confidence, reasons = merge_candidates(
         rule_candidates,
-        ml_candidate,
+        None,
         session.get("supply_prior", 0.6)
     )
 
@@ -854,29 +839,6 @@ def predict_intent_prototype(text: str, cached_intent=None, cached_lang=None):
             chosen_intent = "search"
         confidence = search_score
 
-    # --- STEP 7: 🧠 LOCAL ML MODEL (The Robust Fix) ---
-    try:
-        if intent_clf is not None:
-            m = get_embedding_model()
-            emb = m.encode([text])
-            preds = intent_clf.predict(emb)
-
-            # ✅ THE FIX: Explicitly extract the string value from list/array
-            best_intent = preds[0] if isinstance(preds, (list, np.ndarray)) else preds
-
-            probs = intent_clf.predict_proba(emb)
-            ml_confidence = float(np.max(probs))
-
-            final_ml_conf = blend_confidence(ml_confidence, session.get("supply_prior", 0.6))
-
-            # Instead of returning, we update the variables so the code flows to extraction
-            # Only allow ML override if rules are weak
-            if final_ml_conf > confidence and confidence < 0.75:
-                chosen_intent = best_intent
-                confidence = final_ml_conf
-    except Exception as e:
-        # logger.error(f"❌ Local Prediction Error: {e}")
-        pass
 
     # --- STEP 8: THE FINAL CONFLICT RESOLVER (The "Employer" Firewall) ---
     # 🛡️ Updated to catch "I have a job offer" or "Giving an offer"
@@ -1936,20 +1898,7 @@ def log_interaction(record: dict):
 intent_clf = None
 model_lock = threading.Lock()
 
-def load_intent_classifier(path="intent_clf.joblib"):
-    global intent_clf
-    try:
-        clf = joblib.load(path)
-        with model_lock:
-            intent_clf = clf
-        logger.info("Loaded intent classifier from %s", path)
-        return True
-    except Exception:
-        logger.info("No intent classifier found at %s; using prototype rules", path)
-        return False
 
-# Try to load classifier at startup if present
-load_intent_classifier()
 
 # -------------------------
 # Helper: send a reply via Graph API
@@ -8019,100 +7968,11 @@ def webhook():
 
 
 
-def train_intent_job():
-    """
-    4ound AI: Production Local Intent Training
-    Updates the .joblib file AND hot-swaps the model in memory.
-    """
-    global intent_clf  # Match the name used in your main script
-
-    try:
-        logger.info("🚀 Starting 4ound Local Model Training...")
-
-        # 1. LOAD & CLEAN DATA
-        if not os.path.exists("training_data.csv"):
-            logger.error("❌ Training failed: 'training_data.csv' is missing!")
-            return False
-
-        # Using engine='python' or encoding='utf-8' is safer for Windows/emojis
-        df = pd.read_csv("training_data.csv", encoding='utf-8')
-
-        # Fix: Ensure column names match your CSV (you used 'text' and 'Text' interchangeably)
-        # We'll normalize to lowercase to be safe
-        df.columns = [c.lower() for c in df.columns]
-        df = df.dropna(subset=['text', 'label'])
-
-        if df.empty:
-            logger.error("❌ Training failed: CSV is empty or incorrectly formatted!")
-            return False
-
-        texts = df['text'].tolist()
-        labels = df['label'].tolist()
-
-        # 2. VECTORIZE (Using the lazy-loader helper)
-        logger.info(f"Encoding {len(texts)} examples... (This may take a moment on legacy hardware)")
-        m = get_embedding_model()
-        X = m.encode(texts)
-
-        # 3. TRAIN THE CLASSIFIER
-        clf = LogisticRegression(max_iter=1000, multi_class='multinomial')
-        clf.fit(X, labels)
-
-        # 4. SAVE TO DISK
-        joblib.dump(clf, "intent_clf.joblib")
-
-        # 5. HOT-SWAP
-        # Instead of setting to None, we update the global variable with the newly trained clf
-        with model_lock:
-            intent_clf = clf
-
-        logger.info(f"✅ SUCCESS: 4ound brain updated. Processed {len(texts)} intents.")
-        return True
-
-    except Exception as e:
-        logger.error(f"❌ TOTAL TRAINING FAILURE: {e}")
-        return False
-
-
-
-# -------------------------
-# Admin endpoints
-# -------------------------
-@app.route("/admin/reload_model", methods=["POST"])
-def admin_reload_model():
-    token = request.headers.get("X-Admin-Token")
-    if token != ADMIN_RELOAD_TOKEN:
-        return "unauthorized", 403
-    data = request.get_json(silent=True) or {}
-    path = data.get("path", "intent_clf.joblib")
-    success = load_intent_classifier(path)
-    if success:
-        return jsonify({"status": "reloaded", "path": path}), 200
-    return jsonify({"status": "failed", "path": path}), 500
-
-@app.route("/admin/trigger_training", methods=["POST"])
-def admin_trigger_training():
-    token = request.headers.get("X-Admin-Token")
-    if token != ADMIN_RELOAD_TOKEN:
-        return "unauthorized", 403
-    # Run training synchronously (local dev). In production, trigger a separate job.
-    ok = train_intent_job()
-    if ok:
-        return jsonify({"status": "training_completed"}), 200
-    return jsonify({"status": "training_failed"}), 500
-
 # -------------------------
 # -------------------------
 # Scheduler setup (APScheduler)
 # -------------------------
 scheduler = BackgroundScheduler()
-scheduler.add_job(
-    train_intent_job,
-    'cron',
-    hour=TRAIN_HOUR,
-    minute=TRAIN_MINUTE,
-    id="daily_training_job"
-)
 
 # -------------------------
 # App entrypoint
