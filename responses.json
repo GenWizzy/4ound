@@ -1,0 +1,510 @@
+{
+  "English": {
+    "search": {
+      "search_header": "🔍 *4ound these matches near you:*",
+      "searching_start": [
+        "Searching for {item} near you now...",
+        "Checking the 4ound map for {item} for you!",
+        "Hunting for a {item} nearby. Hang tight!",
+        "Looking for the top-rated {item} around your location...",
+        "4ound Brain is active! Searching for {item} near you."
+      ],
+      "top_pick_caption": "✅ *{title}*\n📍 {distance} km away",
+      "no_results": [
+        "😕 I couldn't find any active {item} results near you right now.\n\nTry another keyword, nearby area, or send a location pin 📍",
+
+        "No nearby {item} listings showed up yet.\n\nYou can try:\n• Another keyword\n• A nearby area\n• Sending your location 📍",
+
+        "I checked around your area but couldn't find any active {item} right now.\n\nType help to see search examples or reset to start over. If you provided location by text, being specific with location helps.",
+
+        "Looks like there aren't any active {item} listings close to you yet.\n\nTry broadening your search or sending a nearby location 📍"
+        ],
+      "location_request": [
+        "📍 To find *{item}*, please share your location. You can type-in your location as a text.",
+        "Where are you currently? Send your location so I can show you *{item}* nearby. You can type-in your location as a text. 🌍"
+      ],
+      "vague_request": [
+        "I'm ready to search! 🔍 What exactly are you looking for?",
+        "Help me out a bit—what specific item or service do you need? 🛠️"
+      ]
+    },
+    "offer_quick": {
+  "start": [
+    "Great! Let's get {item} listed so people can find you.\n\n_(Type *reset* at any time to start over)_",
+    "I can help you sell that {item}. Let's start the registration!\n\n_(Type *reset* if you need to start fresh)_"
+  ],
+  "ask_item_name": [
+    "What is the *name* of the item you want to sell? (e.g., iPhone 13, Designer Bag)",
+    "To start, what exactly are you selling? 🔍 (e.g., 'Toyota Corolla 2015' or 'Kitchen Blender').",
+    "Please tell me the *name or title* of your item. 📝 (Example: 'PS5 Console' or 'Office Desk')."
+  ],
+  "ask_item_info": [
+  "Got it! Now, tell me more about the *condition and specs* of this {item}. 📝 (e.g., 'Slightly used' or 'Size 42, no scratches').",
+  "Nice choice! Can you give a quick description of the {item}? 🔍 (e.g., 'Bought 2 months ago...').",
+  "Great. Please share a few more details about the state of your {item}. 🛠️ (Example: 'Almost brand new...')."
+],
+  "ask_photo": [
+    "📸 Great details! Now, please **send a clear photo** of the {item} so buyers can see it.",
+    "A picture is worth a thousand words! Please *upload a photo* of the item now."
+  ],
+  "ask_price": [
+    "How much are you selling this {item} for? 💰 (e.g., 50k or 50,000)",
+    "What's your asking price for this {item}? 💰"
+  ],
+  "ask_phone": "Perfect, *{price}* for the *{item}* sounds like a great deal! 🤝 What *Number/WhatsApp number* should buyers use to contact you? 📞",
+  "ask_visibility": "How do you want to handle the sale?\n\n1. *Physical Meetup* 📍 (Meet in person)\n2. *Delivery Only* 🚚 (Ship to buyer)",
+  "ask_location": "Final step! 📍 Please share the location where the item is for pickup.",
+  "phone_error": "❌ Please provide a valid phone number so buyers can reach you.",
+  "success_msg": "Listing Successful! Your item is live for 7 days.",
+  "location_button_error": "📍 Please use the *'Send Location'* button above!"
+    },
+    "offer_job": {
+  "start": [
+  "Got it! I'll help you hire for this role. 💼",
+  "I'll help you get the word out for this opening! 🚀",
+  "Let's find the right people for your opening. 👥"
+],
+  "ask_job_details": [
+    "What are the requirements for this position? 📄",
+    "What should applicants know about the job? 📄"
+  ],
+  "ask_job_salary": [
+    "What is the pay for this position? 💰 (e.g., 200k or 150000)",
+    "How much are you offering for the job 💰 (e.g., 50k or 400,000)"
+],
+  "ask_phone": "Got it! **{price}** sounds good. 💼 What number/WhatsApp number should applicants use to contact you? 📞",
+  "ask_name": "What is your **Business, Company or Brand Name**?",
+  "ask_visibility": "Is this job location-specific?\n\n1. *On-site* 📍 (Must be at the location)\n2. *Remote/Anywhere* 🌍 (Location doesn't matter)\n\n*Please reply with 1 or 2*",
+  "ask_location": "Where is the job based? 📍 Please share the location.",
+  "phone_error": "❌ Please provide a valid number so applicants can contact you.",
+  "success_msg": "Job Posted! I'll show this to qualified people nearby.",
+  "location_button_error": "📍 Please use the *'Send Location'* button above!"
+    },
+    "offer_pro": {
+  "start": [
+  "Ready to put your {item} service on the map? I just need a few details.\n\n_(Type *reset* at any time to start over)_",
+
+  "Ready to help customers discover your {item} service?\n\n_(Type *reset* at any time to start over)_",
+
+  "Let's get your {item} service listed so locals can find you!\n\n_(Type *reset* if you need to start fresh)_"
+],
+  "ask_details": [
+  "Tell us more about your {item} services. 🛠️",
+  "Describe the {item} services you offer. 📝",
+  "What should customers know about your {item} services?"
+],
+  "start_generic": [
+  "Ready to put your business on the map? I just need a few details.",
+  "Let's get your business listed so customers nearby can find you.",
+  "Great! Let's set up your business profile."
+],
+  "ask_details_generic": [
+  "Great! Tell us more about the service you offer.",
+  "Describe your business in a few words so customers can find you.",
+  "What kind of service do you provide?",
+  "Tell customers what your business does."
+],
+  "ask_name": "What is your *Name, Business/Company or Brand Name*?",
+  "ask_phone": "Great! What *Number/WhatsApp number* should customers use to contact you? 📞",
+  "ask_visibility": "How should customers find you?\n\n1. *Physical Shop* 📍 (People can visit me)\n2. *Delivery Only* 🚚 (Hide my house address)\n\n*Please reply with 1 or 2*",
+  "ask_location": "Final step! 📍 Please share your office/shop location.",
+  "phone_error": "❌ Please provide a valid phone number so customers can reach you.",
+  "success_msg": "Registration Successful! Your business is live.",
+  "location_button_error": "📍 Please use the *'Send Location'* button above!"
+    },
+    "general": {
+      "greeting": [
+        "Hello! I'm the 4ound Brain. How can I help you today?\n\n(Btw, if you ever get stuck, just type 'reset' to start over! 😊)",
+        "Welcome to 4ound! What can I help you find today?\n\n💡 Pro-tip: Type 'reset' anytime if you want to start a fresh search.",
+        "4ound is here! 🔍 What are you looking for or listing today?\n\n(If you make a mistake, no problem type 'reset' and we go again! ✌️)",
+        "Welcome back! I'm ready to bridge the gap between you and your needs. 🚀\n\n🔄 Just so you know, typing 'reset' clears your current flow instantly.",
+        "The 4ound map is open! 🗺️ How can I help you find (or be found) today?\n\n(Need to clear the map? Just type 'reset' to head back to home base! 📍)"
+      ],
+      "fallback": [
+        "I'm not quite sure how to handle that yet. 🧐\n\nTry phrases like:\n👉 'I need to buy a mattress'\n👉 'I am a fashion designer'",
+        "Hmm, I didn't get that. I'm still learning! 🧠\n\nYou can try:\n👉 'Where is the nearest pharmacy?'\n👉 'I run a laundry business'",
+        "I'm not quite sure how to handle that yet. 🧐\n\nTry phrases like:\n👉 'I want to sell my phone'\n👉 'I need a plumber near me'",
+        "Hmm, I didn't get that. I'm still learning! 🧠\n\nYou can try:\n👉 'I want to list my shoe for sale'\n👉 'Where is the nearest pharmacy?'"
+      ]
+    }
+  },
+  "Pidgin": {
+    "search": {
+      "search_header": "🔍 *I de find these matches for your side:*",
+      "searching_start": [
+        "I de find {item} for your area now...",
+        "Make I check the 4ound map for {item} for you!",
+        "4ound Brain de active! I de look for {item} for your side."
+      ],
+      "no_results": [
+        "I no see any '{item}' for this area o. 😔",
+        "Person never list '{item}' for here yet. You wan try another thing?"
+      ],
+      "location_request": [
+        "📍 Abeg send your location make I fit find '{item}' for you.",
+        "Send your location pin make I show you {item} wey close."
+      ],
+      "vague_request": [
+        "I ready to search! 🔍 Wetin you de look for exactly?",
+        "Abeg help me—which specific item or service you need? 🛠️"
+      ]
+    },
+    "offer_quick": {
+  "start": [
+    "Correct! Make we put your {item} for map so people go see you.",
+    "I fit help you sell that {item}. Make we start registration!"
+  ],
+  "ask_item_info": [
+  "Got it! Now, abeg talk more about this **{item}**. 📝 (Example: 'Original charger follow am' or 'Size 42, e still new').",
+  "Nice! Wetin be the **Condition and Specs** of the {item}? 🛠️ (Example: 'Slightly used' ko 'Brand new').",
+  "Correct. Abeg give me small details about the state of the {item}. 🔍 (Example: 'E still dey inside box')."
+],
+  "ask_item_name": [
+  "Wetin be the **name** of the thing you wan sell? (Example: iPhone 13, Designer Bag)",
+  "To start, wetin you de sell exactly? 🔍 (Example: 'Toyota Corolla 2015' or 'Kitchen Blender').",
+  "Abeg tell me the **name or title** of your item. 📝 (Example: 'PS5 Console' or 'Office Desk')."
+],
+  "ask_photo": [
+    "📸 Correct details! Now, abeg **send clear photo** of the {item} make buyers see am.",
+    "Abeg **upload photo** of the item now. Image dey help person sell fast! 🖼️"
+  ],
+  "ask_price": [
+    "How much you wan sell this {item}? 💰 (Example: 50k or 50,000)",
+    "Wetin be your price for this {item}? 💰"
+  ],
+  "ask_phone": "Correct! Which **WhatsApp number** buyers go use reach you? 📞",
+  "ask_visibility": "How you wan take sell am?\n\n1. *Physical Meetup* 📍 (People go come meet you)\n2. *Delivery Only* 🚚 (You go send am to them)",
+  "ask_location": "Last step! 📍 Abeg share the location where the person go pick am up.",
+  "phone_error": "❌ Abeg drop correct phone number make buyers for fit reach you.",
+  "success_msg": "You don list am correct! Your item go dey live for 7 days.",
+  "location_button_error": "📍 Abeg use the *'Send Location'* button wey de up!"
+},
+"offer_job": {
+  "start": [
+    "I get you! Make we find person for this {item} work. 💼",
+    "I go help you find correct person for this job!"
+  ],
+  "ask_job_details": [
+    "Abeg talk wetin the work be about. 📝 (Example: 'I need driver for 3 days' or 'I need help for house').",
+    "Wetin person need get before dem fit do this {item} work? 📄"
+  ],
+  "ask_job_salary": [
+    "How much be the salary for this {item} work? 💰 (Example: 100k or Negotiable)",
+    "Wetin be the pay or the budget for this role? 💵"
+  ],
+  "ask_phone": "Which **WhatsApp number** applicants go use reach you? 📞",
+  "ask_visibility": "This work get specific place?\n\n1. *On-site* 📍 (Person must come the office/house)\n2. *Remote/Anywhere* 🌍 (The person fit work from anywhere)\n\n*Abeg reply with 1 or 2*",
+  "ask_location": "Where the work de based? 📍 Abeg share the location.",
+  "phone_error": "❌ Abeg drop correct phone number make people for fit reach you.",
+  "success_msg": "Work don live! I go show am to people wey close.",
+  "location_button_error": "📍 Abeg use the *'Send Location'* button wey de up!"
+    },
+    "offer_pro": {
+      "start": [
+        "You ready to put your {item} business for map? I just need small details.",
+        "Make we register your service so people for your area go find you!"
+      ],
+      "ask_details": "Correct! Tell us exactly wetin you de do for your **{item}** business. 📝 (Example: 'I de sew native and suit' ko 'I de do home delivery').",
+      "ask_name": "Wetin be your **Business or Brand Name**?",
+      "ask_phone": "Correct! Which **WhatsApp number** customers go use call you? 📞",
+      "ask_visibility": "How customers go take find you?\n\n1. *Physical Shop* 📍 (People fit come meet me)\n2. *Delivery Only* 🚚 (Hide my house address)\n\n*Abeg reply with 1 or 2*",
+      "ask_location": "Last step! 📍 Abeg share your shop or office location.",
+      "phone_error": "❌ Abeg drop correct phone number make customers for fit reach you.",
+      "success_msg": "Registration Done Correct! Your business don live.",
+      "location_button_error": "📍 Abeg use the *'Send Location'* button wey de up!"
+    },
+    "general": {
+      "greeting": [
+        "How far! Na 4ound Brain be this. Wetin you wan do today?\n\n(If you jam block, just type 'reset' to start again! 😊)",
+        "How body! You need service or you wan list your own?\n\n💡 Pro-tip: Type 'reset' anytime if you wan fresh search."
+      ],
+      "fallback": [
+        "I no too catch that one. 🧐\n\nTry talk something like:\n👉 'I need plumber'\n👉 'I wan sell cake'",
+        "Abeg, try talk like this:\n👉 'Where pharmacy de?'\n👉 'I be electrician for Kubwa'"
+      ]
+    }
+  },
+  "Yoruba": {
+    "search": {
+      "search_header": "🔍 *Awọn nkan wọnyi wa nitosi rẹ:*",
+      "searching_start": [
+        "Mo n wa {item} nitosi rẹ lọwọlọwọ...",
+        "Mo n ṣayẹwo maapu 4ound fun {item} rẹ!",
+        "Brain 4ound ti ṣetan! Mo n wa {item} nitosi rẹ."
+      ],
+      "no_results": [
+        "Mi o ri {item} kankan ni agbegbe yi o. 😔",
+        "O dabi pe iwọ ni ẹni akọkọ ti o n wa {item} nibi! A ko ri nkan kankan."
+      ],
+      "location_request": [
+        "📍 Lati wa {item}, jọwọ fi ipo rẹ ranṣẹ.",
+        "Nibo ni o wa lọwọlọwọ? Fi ipo rẹ ranṣẹ ki n le fi {item} ti o wa nitosi rẹ han ọ. 🌍"
+      ],
+      "vague_request": [
+        "Mo ti ṣetan lati wa nkan! 🔍 Kini nkan pato ti o n wa?",
+        "Jọwọ ran mi lọwọ—kini nkan tabi iṣẹ ti o nilo gangan? 🛠️"
+      ]
+    },
+    "offer_quick": {
+  "start": [
+    "O da gidi! Ẹ jẹ ki a ṣe akosile {item} rẹ ki awọn eniyan le ri ọ.",
+    "Mo le ràn ọ lọ́wọ́ láti ta {item} yẹn. Ẹ jẹ́ kí a bẹ̀rẹ̀!"
+  ],
+  "ask_item_info": [
+  "O dára! Jọ̀wọ́ sọ púpọ̀ sí i nípa **ìjẹ́gidi àti àpèjúwe** {item} yìí. 📝 (Àpẹẹrẹ: 'Ó ṣì jẹ́ tuntun' tàbí 'Ìtóbi rẹ̀ jẹ́ 42').",
+  "Ẹ kú iṣẹ́! Kí ni àwọn nkan tí oníbàárà yẹ kí ó mọ̀ nípa {item} yìí? 🛠️ (Àpẹẹrẹ: 'Mo rà á ní oṣù méjì sẹ́yìn' tàbí 'Kò ní fọ́nrán kankan')."
+],
+  "ask_item_name": [
+  "Kí ni **orúkọ** nkan tí o fẹ́ tà? (Àpẹẹrẹ: iPhone 13, Designer Bag)",
+  "Láti bẹ̀rẹ̀, kí ni o n tà gangan? 🔍 (Àpẹẹrẹ: 'Toyota Corolla 2015' tàbí 'Iná raga').",
+  "Jọ̀wọ́ sọ **orúkọ** nkan náà fún mi. 📝 (Àpẹẹrẹ: 'PS5 Console' tàbí 'Tábìlì Ọ́fíìsì')."
+],
+  "ask_photo": [
+    "📸 Ẹ kú iṣẹ́! Jọ̀wọ́ **fi fọ́tò tó ṣe kedere** ránṣẹ́ kí àwọn oníbàárà lè rí {item} náà.",
+    "Ẹ jọ̀wọ́ **fi fọ́tò {item} náà ránṣẹ́** sínú WhatsApp yìí báyìí. 🖼️"
+  ],
+  "ask_price": [
+    "Elò ni ẹ fẹ́ ta {item} yìí? 💰 (Àpẹẹrẹ: 50k tàbí 50,000)",
+    "Kí ni iye owó tí ẹ fẹ́ gba lórí {item} yìí? 💰"
+  ],
+  "ask_phone": "O dára! Nọ́mbà **WhatsApp** wo ni àwọn oníbàárà yóò lò láti kàn sí yín? 📞",
+  "ask_visibility": "Báwo ni o ṣe fẹ́ gbé títà rẹ kalẹ̀?\n\n1. *Ìpàdé Gidi* 📍 (Pàdé oníbàárà rẹ)\n2. *Gbigbe nikan* 🚚 (Fi ránṣẹ́ sí oníbàárà)\n\n*Jọ̀wọ́ fèsì pẹ̀lú 1 tàbí 2*",
+  "ask_location": "Ìgbésẹ̀ tó kẹ́yìn! 📍 Jọ̀wọ́ pin ibi tí a ti lè gba ẹrù náà.",
+  "phone_error": "❌ Jọ̀wọ́ pèsè nọ́mbà tẹlifóònù tó tọ̀nà kí oníbàárà lè kàn sí ọ.",
+  "success_msg": "Ìforúkọsílẹ̀ ti kékeré! Ọjà rẹ yóò wà lórí afẹ́fẹ́ fún ọjọ́ méje.",
+  "location_button_error": "📍 Jọ̀wọ́ lo bọ́tìnì *'Send Location'* tó wà lókè yẹn!"
+},
+"offer_job": {
+  "start": [
+    "Mo gbọ́! Ẹ jẹ́ kí a wá ẹni tí yóò ṣe iṣẹ́ {item} yìí. 💼",
+    "N óò ràn ọ́ lọ́wọ́ láti polongo iṣẹ́ yìí!"
+  ],
+  "ask_job_details": [
+    "Jọ̀wọ́ ṣàlàyé iṣẹ́ náà. 📝 (Àpẹẹrẹ: 'Mo n wa awakọ fun ọjọ mẹta').",
+    "Kí ni àwọn ohun tí ẹni tó fẹ́ ṣe iṣẹ́ {item} yìí gbọ́dọ̀ ní? 📄"
+  ],
+  "ask_job_salary": [
+    "Elò ni owó oṣù tàbí owó iṣẹ́ {item} yìí? 💰 (Àpẹẹrẹ: 100k tàbí Negotiable)",
+    "Kí ni iye owó tí ẹ máa san fún iṣẹ́ yìí? 💵"
+  ],
+  "ask_phone": "Nọ́mbà **WhatsApp** wo ni àwọn tí n wá iṣẹ́ yóò lò láti kàn sí ọ? 📞",
+  "ask_visibility": "Ṣé iṣẹ́ yìí ní ibì kan pàtó?\n\n1. *Ibì kan pàtó* 📍 (Wọn gbọ́dọ̀ wá sí ọ́fíìsì)\n2. *Ibi yówù kí ó wà* 🌍 (Wọn le ṣiṣẹ́ láti ibikíbi)\n\n*Jọ̀wọ́ fèsì pẹ̀lú 1 tàbí 2*",
+  "ask_location": "Níbo ni iṣẹ́ náà wà? 📍 Jọ̀wọ́ pin ipo rẹ.",
+  "phone_error": "❌ Jọ̀wọ́ pèsè nọ́mbà tẹlifóònù tó tọ̀nà.",
+  "success_msg": "A ti polongo iṣẹ́ rẹ! N óò fi han àwọn tó wà nitosi.",
+  "location_button_error": "📍 Jọ̀wọ́ lo bọ́tìnì *'Send Location'* tó wà lókè yẹn!"
+    },
+    "offer_pro": {
+      "start": [
+        "Ṣé o ti ṣetán láti fi iṣẹ́ {item} rẹ sí orí maapu? Mo nílò àwọn ìsọfúnni díẹ̀.",
+        "Ẹ jẹ́ kí a forúkọ iṣẹ́ rẹ sílẹ̀ kí àwọn èèyàn agbègbè rẹ lè rí ọ!"
+      ],
+      "ask_details": "O dá gidi! Jọ̀wọ́ ṣàlàyé púpọ̀ sí i nípa iṣẹ́ **{item}** rẹ. 📝 (Àpẹẹrẹ: 'Mo mọ iṣẹ́ aṣọ rírán fún tọkùnrin àti tobìnrin' tàbí 'Mo le wá sí ilé yín').",
+      "ask_name": "Kini **Orukọ Iṣẹ́** tàbí Brand rẹ?",
+      "ask_phone": "O dára! Nọ́mbà **WhatsApp** wo ni àwọn oníbàárà yóò lò láti kàn sí yín? 📞",
+      "ask_visibility": "Báwo ni àwọn oníbàárà ṣe yẹ kí ó rí ọ?\n\n1. *Ṣọ́ọ̀bù Gidi* 📍 (Àwọn èèyàn lè wá bẹ̀ mi wò)\n2. *Gbigbe nikan* 🚚 (Pa àdírẹ́sì ilé mi mọ́)\n\n*Jọ̀wọ́ fèsì pẹ̀lú 1 tàbí 2*",
+      "ask_location": "Ìgbésẹ̀ tó kẹ́yìn! 📍 Jọ̀wọ́ pin ibi tí ṣọ́ọ̀bù tàbí ọ́fíìsì rẹ wà.",
+      "phone_error": "❌ Jọ̀wọ́ pèsè nọ́mbà tẹlifóònù tó tọ̀nà.",
+      "success_msg": "Ìforúkọsílẹ̀ ti parí láyọ̀! Ọjà rẹ yóò wà lórí afẹ́fẹ́ fún ọjọ́ méje.",
+      "location_button_error": "📍 Jọ̀wọ́ lo bọ́tìnì *'Send Location'* tó wà lókè yẹn!"
+    },
+    "general": {
+      "greeting": [
+        "Ẹ n lẹ o! Emi ni Brain 4ound. Kini o fẹ ṣe loni?\n\n(Ti o ba fẹ bẹrẹ lẹẹkansii, tẹ 'reset'! 😊)",
+        "Ẹ kú àbọ̀ sí 4ound! Báwo ni mo ṣe le ràn ọ́ lọ́wọ́?"
+      ],
+      "fallback": [
+        "Gbiyanju lati sọ nkan bi:\n👉 'Mo n wa makaniki'\n👉 'Mo fẹ ta akara bẹredi'",
+        "Jọ̀wọ́, sọ nkan bíi:\n👉 'Níbo ni ile-iwosan ti o sunmọ wa?'\n👉 'Iná mọ̀nàmọ́nà ni mi ní Kubwa'"
+      ]
+    }
+  },
+  "Hausa": {
+    "search": {
+      "search_header": "🔍 *Ga waɗanda aka samu kusa da kai:*",
+      "searching_start": [
+        "Ina neman {item} kusa da kai yanzu...",
+        "Ina duba taswirar 4ound don neman {item} dinka!",
+        "Brain 4ound yana aiki! Ina neman {item} kusa da kai."
+      ],
+      "no_results": [
+        "Ban sami wani {item} a kusa ba. 😔",
+        "Kamar kai ne mutum na farko da kake neman {item} a nan! Ba a sami komai ba."
+      ],
+      "location_request": [
+        "📍 Don samun {item}, turo mana wurin da kake.",
+        "Ina kake a yanzu? Turo mana wurin da kake don in nuna maka {item} da ke kusa da kai. 🌍"
+      ],
+      "vague_request": [
+        "Na shirya bincike! 🔍 Menene kake nema takamaimai?",
+        "Taimaka mini—wane takamaiman abu kake bukata? 🛠️"
+      ]
+    },
+    "offer_quick": {
+  "start": [
+    "Madalla! Bari mu sanya {item} dinka a taswira domin mutane su same ka.",
+    "Zan iya taimaka maka ka sayar da {item} dinka. Bari mu fara rajista!"
+  ],
+  "ask_item_info": [
+  "Madalla! Yanzu kuma, gaya mini yanayin **inganci da bayanan** wannan {item} din. 📝 (Misali: 'Sabo ne a cikin akwati' ko 'An yi amfani da shi kaɗan, girman sa 42').",
+  "Yayi kyau! Za ka iya ba mu takaitaccen bayani game da {item} din? 🔍 (Misali: 'Yana da dukkan kayan sa' ko 'Ba shi da kowane datti').",
+  "Madalla. Don Allah bayyana mana yanayin wannan {item} din. 🛠️ (Misali: 'Ingancin baturi kashi 85%' ko 'Wata biyu kawai aka yi amfani da shi')."
+],
+  "ask_photo": [
+    "📸 Madalla! Yanzu kuma, don Allah **turo hoto** mai kyau na {item} din domin masu saya su gani.",
+    "Don Allah **saka hoton** abun da kake sayarwa yanzu. Hoto yana sa kaya sayuwa da sauri! 🖼️"
+  ],
+  "ask_price": [
+    "Nawa ne farashin wannan {item} din? 💰 (Misali: 50k ko 50,000)",
+    "Nawa kake son sayar da wannan {item} din? 💰"
+  ],
+  "ask_phone": "Madalla! Wace lamba ce ta **WhatsApp** ya kamata masu saya su yi amfani da ita? 📞",
+  "ask_visibility": "Yaya kake son gudanar da ciniki?\n\n1. *Haɗuwar Gaske* 📍 (Masu saya su zo su same ka)\n2. *Isarwa kawai* 🚚 (Za a tura wa mai saya ta mota/keke)\n\n*Don Allah yi amfani da 1 ko 2*",
+  "ask_location": "Mataki na ƙarshe! 📍 Da fatan za a raba wurin da za a karɓi abun.",
+  "phone_error": "❌ Da fatan za a samar da ingantacciyar lambar waya domin masu saya su same ka.",
+  "success_msg": "An yi nasarar sanya kaya! Kaya dinka zai kasance a raye har tsawon kwanaki 7.",
+  "location_button_error": "📍 Da fatan za a yi amfani da maballin *'Send Location'* da ke sama!"
+},
+"offer_job": {
+  "start": [
+    "Na fahimta! Bari mu nemo wanda zai yi wannan aikin {item}. 💼",
+    "Zan taimaka maka wajen tallata wannan gururbin aiki!"
+  ],
+  "ask_job_details": [
+    "Da fatan za a bayyana aikin. 📝 (Misali: 'Ina neman direba na kwanaki uku' ko 'Ina neman mai taimaka a gida').",
+    "Wadanne abubuwa ne ake bukata domin samun wannan aikin na {item}? 📄"
+  ],
+  "ask_job_salary": [
+    "Nawa ne albashin wata-wata ko kudin da za a biya na wannan aikin {item}? 💰 (Misali: 100k ko Negotiable)",
+    "Nawa ne albashin wannan aikin? 💵"
+  ],
+  "ask_phone": "Wace lamba ce ta **WhatsApp** ya kamata masu neman aiki su yi amfani da ita? 📞",
+  "ask_visibility": "Shin wannan aikin yana bukatar zama a wani wuri takamaimai?\n\n1. *A Ofis/Gida* 📍 (Dole ne mutum ya zo wurin aikin)\n2. *Daga ko'ina* 🌍 (Mutum zai iya yin aikin daga ko'ina)\n\n*Don Allah yi amfani da 1 ko 2*",
+  "ask_location": "Ina wurin aikin yake? 📍 Da fatan za a raba wurin da kake.",
+  "phone_error": "❌ Da fatan za a samar da ingantacciyar lambar waya.",
+  "success_msg": "An tallata aikin! Zan nuna wa mutanen da ke kusa da kai.",
+  "location_button_error": "📍 Da fatan za a yi amfani da maballin *'Send Location'* da ke sama!"
+    },
+    "offer_pro": {
+      "start": [
+        "Ka shirya sanya kasuwancin {item} dinka a taswira? Ina bukatar wasu bayanan.",
+        "Bari mu yi rajistar sana'ar ka domin mutanen kusa da kai su same ka!"
+      ],
+      "ask_details": "Madalla! Gaya mana takamaiman abin da kake yi a sana'ar ka ta **{item}**. 📝 (Misali: 'Ni tela ne da nake dinkin maza da mata' ko 'Ina yin isar da sako har gida').",
+      "ask_name": "Menene **Sunan Kasuwancin** ku?",
+      "ask_phone": "Madalla! Wace lamba ce ta **WhatsApp** ya kamata abokan ciniki su yi amfani da ita? 📞",
+      "ask_visibility": "Yaya kake son abokan ciniki su same ka?\n\n1. *Shagon Gaske* 📍 (Mutane za su iya ziyarta ta)\n2. *Isarwa kawai* 🚚 (Boye adireshin gida na)\n\n*Don Allah turo 1 ko 2*",
+      "ask_location": "Mataki na ƙarshe! 📍 Da fatan za a raba wurin shagonku ko ofishinku.",
+      "phone_error": "❌ Da fatan za a samar da ingantacciyar lambar waya.",
+      "success_msg": "An yi nasarar yin rajista! Kasuwancin ku yana raye yanzu.",
+      "location_button_error": "📍 Da fatan za a yi amfani da maballin *'Send Location'* da ke sama!"
+    },
+    "general": {
+      "greeting": [
+        "Sannu! Barka da zuwa 4ound. Ta yaya zan iya taimaka maka a yau?\n\n(Idan ka sami matsala, taba 'reset' don farawa! 😊)",
+        "Maraba da 4ound! Me kake son samu a yau?"
+      ],
+      "fallback": [
+        "Ban gama fahimtar wannan ba. 🧐\n\nGwada faɗar wani abu kamar:\n👉 'Ina son makanike'\n👉 'Ina son sayar da biredi'",
+        "Don Allah, gwada fadar wani abu kamar:\n👉 'Ina kantin magani mafi kusa?'\n👉 'Ni mai gyaran wutar lantarki ne a Kubwa'"
+      ]
+    }
+  },
+  "Igbo": {
+    "search": {
+      "search_header": "🔍 *Ihe ndị a dị nso na gị:*",
+      "searching_start": [
+        "A na m achọ {item} nso gị ugbu a...",
+        "A na m elele maapu 4ound maka {item} gị!",
+        "Brain 4ound adịla njikere! A na m achọ {item} nso gị."
+      ],
+      "no_results": [
+        "Ahụghị m {item} ọ bụla nso ebe a. 😔",
+        "Ọ dị m ka ọ bụ gị bụ onye mbụ na-achọ {item} ebe a! Ahụghị m ihe ọ bụla."
+      ],
+      "location_request": [
+        "📍 Ka i wee nweta {item}, biko ziga ebe ị nọ.",
+        "Ebee ka ị nọ ugbu a? Ziga ebe ị nọ ka m gosi gị {item} ndị dị nso na gị. 🌍"
+      ],
+      "vague_request": [
+        "Adị m njikere ịchọ ihe! 🔍 Kedu ihe kpọmkwem ị na-achọ?",
+        "Biko nyere m aka—kedu ihe ma ọ bụ ọrụ ị chọrọ kpọmkwem? 🛠️"
+      ]
+    },
+    "offer_quick": {
+  "start": [
+    "Ọ gba m m m! Ka anyị debanye aha {item} gị ka ndị mmadụ hụ gị.",
+    "Enwere m ike inyere gị aka ire {item} ahụ. Ka anyị malite!"
+  ],
+  "ask_item_info": [
+  "Ọ dị mma! Ugbu a, kọwaa otú **ọnọdụ na nkọwa** {item} a dị. 📝 (Dịka: 'Ọ ka dị ọhụrụ' ma ọ bụ 'Size 42, ọ nweghị ebe ọ rụrụ arụ').",
+  "Imeela! Biko nye nkenke nkọwa gbasara {item} a. 🛠️ (Dịka: 'E jiri ya rụọ ọrụ naanị ọnwa abụọ' ma ọ bụ 'Chaja ya so ya').",
+  "Ọ gba m m m. Biko gwa m ntakịrị gbasara {item} gị. 🔍 (Dịka: 'Battery health ya bụ 85%')."
+],
+  "ask_item_name": [
+  "Gịnị bụ **aha** ihe ị chọrọ ire? (Dịka: iPhone 13, Akpa Designer)",
+  "Ka anyị malite, gịnị kpọmkwem ka ị na-ere? 🔍 (Dịka: 'Toyota Corolla 2015' ma ọ bụ 'Blender kichin').",
+  "Biko gwa m **aha** ihe ị na-ere. 📝 (Dịka: 'PS5 Console' ma ọ bụ 'Tebụl Ọfịs')."
+],
+  "ask_photo": [
+    "📸 Imeela! Ugbu a, biko **ziga foto** doro anya nke {item} ahụ ka ndị na-azụ ihe hụ ya.",
+    "Biko **tinye foto** ihe ị na-ere ugbu a. Foto na-enyere ihe ire ọsọ ọsọ! 🖼️"
+  ],
+  "ask_price": [
+    "Ego ole ka ị na-ere {item} a? 💰 (Dịka: 50k ma ọ bụ 50,000)",
+    "Ego ole ka ị chọrọ ire {item} a? 💰"
+  ],
+  "ask_phone": "Ọ gba m m m! Kedu nọmba **WhatsApp** ndị na-azụ ihe ga-eji kpọtụrụ gị? 📞",
+  "ask_visibility": "Kedu otu ị chọrọ isi ree ya?\n\n1. *Nzukọ ihu-na-ihu* 📍 (Ndị mmadụ ga-abịa hụ gị)\n2. *Nfefe naanị* 🚚 (I zigaara onye na-azụ ya)\n\n*Biko jiri 1 ma ọ bụ 2 zaa*",
+  "ask_location": "Nke ikpeazụ! 📍 Biko ziga ebe a ga-esi nweta ihe ahụ.",
+  "phone_error": "❌ Biko tinye nọmba ekwentị ziri ezi ka ndị na-azụ ihe nwee ike ịkpọtụrụ gị.",
+  "success_msg": "I debaala aha ya nke ọma! Ihe gị ga-adị na 4ound ruo ụbọchị asaa.",
+  "location_button_error": "📍 Biko jiri bọtìnụ *'Send Location'* dị n'elu!"
+},
+"offer_job": {
+  "start": [
+    "A ghọtara m! Ka anyị chọta onye ga-arụ ọrụ {item} a. 💼",
+    "M ga-enyere gị aka ịgbasa ozi maka ohere ọrụ a!"
+  ],
+  "ask_job_details": [
+    "Biko kọwaa ọrụ ahụ. 📝 (Dịka: 'Achọrọ m onye ọkwọ ụgbọ ala maka ụbọchị atọ').",
+    "Kedu ihe ndị a na-achọ n'aka onye ga-arụ ọrụ {item} a? 📄"
+  ],
+  "ask_job_salary": [
+    "Ego ole ka ị ga-akwụ n'ọnwa ma ọ bụ ụgwọ ọrụ maka ọrụ {item} a? 💰 (Dịka: 100k ma ọ bụ Negotiable)",
+    "Ego ole ka i bu n'obi ịkwụ maka ọrụ a? 💵"
+  ],
+  "ask_phone": "Kedu nọmba **WhatsApp** ndị na-achọ ọrụ ga-eji kpọtụrụ gị? 📞",
+  "ask_visibility": "Ọrụ a ọ nwere ebe kpọmkwem a ga-anọ rụọ ya?\n\n1. *N'ọfịs/Ụlọ* 📍 (Onye ahụ ga-anọ n'ebe ahụ rụọ ọrụ)\n2. *Ebe ọ bụla* 🌍 (Onye ahụ nwere ike ịrụ ọrụ site n'ebe ọ bụla)\n\n*Biko jiri 1 ma ọ bụ 2 zaa*",
+  "ask_location": "Ebee ka ọrụ ahụ dị? 📍 Biko ziga ebe ahụ.",
+  "phone_error": "❌ Biko tinye nọmba ekwentị ziri ezi.",
+  "success_msg": "Ebipụtala ozi ọrụ gị! M ga-egosi ya ndị nọ nso.",
+  "location_button_error": "📍 Biko jiri bọtìnụ *'Send Location'* dị n'elu!"
+    },
+    "offer_pro": {
+      "start": [
+        "Ị dịla njikere itinye azụmahịa {item} gị na maapu? Achọrọ m obere ozi.",
+        "Ka anyị debanye aha ọrụ gị ka ndị nọ nso gị nwee ike ịchọta gị!"
+      ],
+      "ask_details": "Ọ dị mma! Gwa anyị ihe kpọmkwem ị na-eme n'ọrụ **{item}** gị. 📝 (Dịka: 'A na m akwa ákwà ndị mmanwu na suti' ma ọ bụ 'A na m ebute ihe n'ụlọ').",
+      "ask_name": "Gịnị bụ **Aha Azụmahịa** gị ma ọ bụ Brand gị?",
+      "ask_phone": "Ọ gba m m m! Kedu nọmba **WhatsApp** ndị ahịa ga-eji kpọtụrụ gị? 📞",
+      "ask_visibility": "Kedu otu ndị ahịa ga-esi achọta gị?\n\n1. *Ụlọ Ahịa* 📍 (Ndị mmadụ nwere ike ịbịa n'ebe m nọ)\n2. *Nfefe nani* 🚚 (Zoo ebe obibi m kpọmkwem)\n\n*Biko jiri 1 ma ọ bụ 2 zaa*",
+      "ask_location": "Nke ikpeazụ! 📍 Biko ziga ebe ụlọ ahịa gị ma ọ bụ ọfịs gị dị.",
+      "phone_error": "❌ Biko tinye nọmba ekwentị ziri ezi.",
+      "success_msg": "Ndebanye aha gara nke ọma! Azụmahịa gị adịla ugbu a.",
+      "location_button_error": "📍 Biko jiri bọtìnụ *'Send Location'* dị n'elu!"
+    },
+    "general": {
+      "greeting": [
+        "Nnọọ! Abụ m Brain 4ound. Gịnị ka m nwere ike imere gị taa?\n\n(Ọ bụrụ na i nwee nsogbu, pịa 'reset' ka anyị malite ọzọ! 😊)",
+        "Nnọọ na 4ound! Gịnị ka ị na-achọ taa?"
+      ],
+      "fallback": [
+        "A ghọtachaghị m ihe i kwuru. 🧐\n\nNwaa ikwu ihe dịka:\n👉 'Achọrọ m onye na-arụ pọmpụ'\n👉 'Achọrọ m ire achịcha'",
+        "Biko, nwaa ikwu ihe dịka:\n👉 'Ebee ka ụlọ ọgwụ kacha nso dị?'\n👉 'Abụ m onye na-arụ ọkụ eletrik na Kubwa'"
+      ]
+    }
+  }
+}
+
