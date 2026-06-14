@@ -1219,11 +1219,12 @@ def get_db():
 def get_embedding_model():
     global model
     if model is None:
-        logger.info("Initializing AI Model... (This only happens once)")
+        logger.info("💡 Lazy loading lightweight AI model...")
         from sentence_transformers import SentenceTransformer
-        # Load it here only when needed
-        model = SentenceTransformer("sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
+        # Use a much lighter model to fit in 512MB
+        model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
     return model
+
 
 
 
@@ -2385,7 +2386,12 @@ def finalize_listing_to_db(from_number, listing_doc, user_session):
         desc = listing_doc.get("description", "")
         search_text = listing_doc.get("search_text") or f"{title} {desc}".strip()
 
+        # 🚀 LAZY LOADING FIX
+        # This calls the getter. Because of the 'global' check, it only
+        # loads the model into RAM the very first time it's called
+        # (either by a search or by a new listing).
         m = get_embedding_model()
+
         emb = m.encode([search_text], convert_to_numpy=True).astype(np.float32)
         listing_doc["embedding"] = emb.flatten().tolist()
 
@@ -7965,6 +7971,17 @@ def webhook():
     # This happens in milliseconds. WhatsApp sees this and stops the "spinning" circle.
     return "OK", 200
 
+# Add this route to main.py
+@app.route('/cron/rebuild', methods=['GET'])
+def trigger_rebuild():
+    # This runs the heavy tasks only when UptimeRobot pings this URL
+    logger.info("⏰ UptimeRobot ping received: Starting background sync...")
+    rebuild_index_from_firestore()
+    process_pending_verifications()
+    nightly_cleanup()
+    return "Sync complete", 200
+
+
 
 
 
@@ -7977,47 +7994,6 @@ scheduler = BackgroundScheduler()
 # -------------------------
 # App entrypoint
 # -------------------------
-def startup():
-    """Runs on module load — works for both gunicorn and direct run."""
-    # 1. PRE-LOAD MODELS
-    get_embedding_model()
-    logger.info("✅ All ML models pre-loaded.")
-
-    # 2. START FAISS REBUILD (Background)
-    threading.Thread(target=rebuild_index_from_firestore, daemon=True).start()
-
-    # 3. SCHEDULER JOBS
-    scheduler.add_job(
-        func=process_pending_verifications,
-        trigger="interval",
-        minutes=2,
-        id="two_min_verification_check"
-    )
-    scheduler.add_job(
-        func=rebuild_index_from_firestore,
-        trigger="interval",
-        minutes=15,
-        id="fifteen_min_index_sync"
-    )
-    scheduler.add_job(
-        func=nightly_cleanup,
-        trigger="interval",
-        minutes=15,
-        id="fifteen_min_expiry_purge"
-    )
-    scheduler.start()
-    logger.info("⏰ Scheduler started.")
-
-    # 4. INITIAL RECOVERY
-    def run_initial_recovery():
-        time.sleep(10)
-        process_pending_verifications()
-    threading.Thread(target=run_initial_recovery, daemon=True).start()
-
-
-# ✅ Call at module level so gunicorn runs it on import
-startup()
-
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=False)
