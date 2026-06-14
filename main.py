@@ -1183,11 +1183,9 @@ def save_advert_to_db(ad_data):
         return False
 
 
+
+
 def get_db():
-    """
-    Returns a thread-safe Firestore client.
-    Uses GOOGLE_APPLICATION_CREDENTIALS if set, otherwise falls back to 4oundkey.json.
-    """
     global _db
     if _db is not None:
         return _db
@@ -1196,24 +1194,33 @@ def get_db():
         if _db is not None:
             return _db
 
+        project = os.getenv("FIRESTORE_PROJECT")
         key_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
-        project = os.getenv("FIRESTORE_PROJECT")  # optional override
+        key_json_str = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
 
-        # 1. If the env variable exists and is valid, use it
-        if key_path and os.path.exists(key_path):
+        # 1. Try JSON string from ENV
+        if key_json_str:
+            logger.info("🔐 Loading Firestore credentials from JSON ENV variable.")
+            key_dict = json.loads(key_json_str)
+            creds = service_account.Credentials.from_service_account_info(key_dict)
+            _db = firestore.Client(project=project or creds.project_id, credentials=creds)
+
+        # 2. Try file path from ENV
+        elif key_path and os.path.exists(key_path):
             creds = service_account.Credentials.from_service_account_file(key_path)
             _db = firestore.Client(project=project or creds.project_id, credentials=creds)
 
-        # 2. FALLBACK: If env is missing, check for your local 4oundkey.json file
+        # 3. Fallback to local file
         elif os.path.exists("4oundkey.json"):
             creds = service_account.Credentials.from_service_account_file("4oundkey.json")
             _db = firestore.Client(project=project or creds.project_id, credentials=creds)
 
-        # 3. Ultimate fallback (Google Default Credentials)
+        # 4. Final attempt
         else:
             _db = firestore.Client(project=project) if project else firestore.Client()
 
         return _db
+
 
 
 def get_embedding_model():
