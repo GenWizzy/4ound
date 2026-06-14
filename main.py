@@ -1305,59 +1305,34 @@ def rebuild_index_from_firestore():
         retry_count = 0
         max_retries = 5
 
-        # --- 1. DATA COLLECTION LOOP ---
-        while True:
-            # 🛡️ THE BROAD FILTER: Pull everything marked for indexing
-            query = (
-                db.collection(FIRESTORE_OFFERS)
-                .where(filter=FieldFilter("indexed", "==", True))
-                .limit(batch_size)
-            )
+        # --- 1. DATA COLLECTION LOOP (Optimized for Memory) ---
+        # Don't use a 'while True' loop with 'start_after' if you can avoid it.
+        # Use .stream() which is a generator that fetches one-by-one.
 
-            if last_doc:
-                query = query.start_after(last_doc)
+        query = db.collection(FIRESTORE_OFFERS).where(filter=FieldFilter("indexed", "==", True))
 
-            try:
-                # Use a 15s timeout to prevent hanging the thread
-                docs = list(query.get(
-                    timeout=15,
-                    retry=g_retry.Retry(deadline=60)
-                ))
-                retry_count = 0  # Reset counter on success
-            except Exception as e:
-                retry_count += 1
-                logger.error(f"⚠️ Batch fetch failed (Attempt {retry_count}/{max_retries}): {e}")
+        # .stream() is a generator; it doesn't load everything into RAM!
+        docs_stream = query.stream()
 
-                if retry_count >= max_retries:
-                    logger.error("❌ Max retries reached. Aborting rebuild to prevent infinite loop.")
-                    return  # Exit the function entirely
+        for doc in docs_stream:
+            data = doc.to_dict()
 
-                time.sleep(5)  # Back off before trying again
+            # 🛡️ THE SURGICAL GATE:
+            l_type = data.get("listing_type") or data.get("entry_type", "service")
+            is_verified = data.get("is_verified", False)
+
+            if l_type == "quick_sale" and not is_verified:
                 continue
 
-            if not docs:
-                break
+            # 🧬 Extract the vector
+            emb = data.get("embedding")
+            if emb:
+                embeddings_list.append(np.array(emb, dtype=np.float32))
+                id_map_local.append(doc.id)
 
-            for doc in docs:
-                data = doc.to_dict()
-
-                # 🛡️ THE SURGICAL GATE:
-                # Quick Sales MUST be verified. Services/Businesses are auto-allowed.
-                l_type = data.get("listing_type") or data.get("entry_type", "service")
-                is_verified = data.get("is_verified", False)
-
-                if l_type == "quick_sale" and not is_verified:
-                    logger.info(f"⏳ Skipping unverified Quick Sale: {doc.id}")
-                    continue
-
-                # 🧬 Extract the vector
-                emb = data.get("embedding")
-                if emb and len(emb) > 0:
-                    embeddings_list.append(np.array(emb, dtype=np.float32))
-                    id_map_local.append(doc.id)
-
-            last_doc = docs[-1]
-            logger.info(f"📥 Batch received. Total synced: {len(id_map_local)}")
+            # 💡 Memory management: Log progress every 50 to track sync, not to hold RAM
+            if len(id_map_local) % 50 == 0:
+                logger.info(f"📥 Batch progress: {len(id_map_local)} vectors processed.")
 
         # --- 2. FAISS BUILD (Heavy CPU Work) ---
         if not embeddings_list:
