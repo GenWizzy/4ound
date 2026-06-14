@@ -53,10 +53,10 @@ model = None
 EMBED_DIM = None
 
 # Zero-shot classifier for greeting/intent detection
-zero_shot_pipeline = pipeline(
-    "zero-shot-classification",
-    model="MoritzLaurer/deberta-v3-base-mnli-fever-anli"
-)
+#zero_shot_pipeline = pipeline(
+#    "zero-shot-classification",
+#    model="MoritzLaurer/deberta-v3-base-mnli-fever-anli"
+#)
 
 # --- GLOBAL AREA (The "Storage") ---
 CACHED_MARKET_TIP = {}  # Dict keyed by city
