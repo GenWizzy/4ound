@@ -8117,60 +8117,49 @@ scheduler.add_job(
 # -------------------------
 # App entrypoint
 # -------------------------
-if __name__ == "__main__":
+def startup():
+    """Runs on module load — works for both gunicorn and direct run."""
     # 1. PRE-LOAD MODELS
     get_embedding_model()
-    logger.info("✅ All ML models (Embedding + Intent) pre-loaded.")
+    logger.info("✅ All ML models pre-loaded.")
 
     # 2. START FAISS REBUILD (Background)
-    rebuild_thread = threading.Thread(target=rebuild_index_from_firestore, daemon=True)
-    rebuild_thread.start()
+    threading.Thread(target=rebuild_index_from_firestore, daemon=True).start()
 
-    # 3. CONFIGURE RECURRING RECOVERY 🚀
-    # Task A: Verification Recovery (Fast check for stuck images)
+    # 3. SCHEDULER JOBS
     scheduler.add_job(
         func=process_pending_verifications,
         trigger="interval",
         minutes=2,
         id="two_min_verification_check"
     )
-
-    # Task B: FAISS Safety Sync (Long-term self-healing)
     scheduler.add_job(
         func=rebuild_index_from_firestore,
         trigger="interval",
         minutes=15,
         id="fifteen_min_index_sync"
     )
-
-    # --- 🆕 Updated Task C: Frequent Auto-Delete ---
-    # Syncs with the 15-minute index update to keep Firestore and FAISS in lockstep
     scheduler.add_job(
         func=nightly_cleanup,
         trigger="interval",
         minutes=15,
         id="fifteen_min_expiry_purge"
     )
-
-    # 4. START SCHEDULER
-    # This starts BOTH the daily training and the 10-min recovery check
     scheduler.start()
-    logger.info("⏰ Scheduler started: 2-min recovery check active for photos and 15 minutes for listing update.")
+    logger.info("⏰ Scheduler started.")
 
-    # 5. RUN INITIAL STARTUP RECOVERY (Optional but recommended)
-    # This handles the very first check immediately after boot
+    # 4. INITIAL RECOVERY
     def run_initial_recovery():
         time.sleep(10)
         process_pending_verifications()
-
     threading.Thread(target=run_initial_recovery, daemon=True).start()
 
-    try:
-        app.run(host="0.0.0.0", port=5000, debug=False)
-    finally:
-        try:
-            scheduler.shutdown()
-        except Exception:
-            pass
+
+# ✅ Call at module level so gunicorn runs it on import
+startup()
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000, debug=False)
 
 
