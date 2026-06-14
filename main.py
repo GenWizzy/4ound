@@ -75,8 +75,15 @@ WHATSAPP_TOKEN = ACCESS_TOKEN
 PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID") # You still need this one!
 # Make sure GOOGLE_APPLICATION_CREDENTIALS is set to 4oundkey.json
 # Do NOT need FIREBASE_PROJECT if using service account
-db = firestore.Client.from_service_account_json("4oundkey.json")
-  # Uses project info from the JSON key
+# --- Replace your old single line with this block ---
+if os.getenv('GOOGLE_APPLICATION_CREDENTIALS_JSON'):
+    key_dict = json.loads(os.getenv('GOOGLE_APPLICATION_CREDENTIALS_JSON'))
+    creds = service_account.Credentials.from_service_account_info(key_dict)
+    db = firestore.Client(credentials=creds)
+else:
+    db = firestore.Client.from_service_account_json("4oundkey.json")
+# -----------------------------------------------------
+# Uses project info from the JSON key
 FIRESTORE_OFFERS =  "listings"
 FIRESTORE_SESSIONS = "sessions"
 FIRESTORE_INTERACTIONS = os.getenv("FIRESTORE_COLLECTION_INTERACTIONS", "interactions")
