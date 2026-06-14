@@ -7573,16 +7573,12 @@ def handle_whatsapp_logic(data):
                                     commit_session(from_number, session)
                                     return
 
-                                # 📍 2. LOCATION RESOLUTION: THE SMART BRIDGE (Global Pure Update)
+                                # 📍 2. LOCATION RESOLUTION: THE SMART BRIDGE
                                 lat = lat or session.get("user_lat")
                                 lng = lng or session.get("user_lng")
-
-                                # Check if we have incoming text to resolve as a fallback location name
                                 text_location_input = cleaned_text if current_flow == "awaiting_search_location" else None
 
                                 # 🚀 CALL PURE GLOBAL ENGINE
-                                # If lat/lng exist, it fires Path 1 (Reverse Geocode).
-                                # If missing but text_location_input exists, it fires Path 2 (Forward Geocode).
                                 geo_check = extract_global_location(
                                     text=text_location_input,
                                     from_number=from_number,
@@ -7590,8 +7586,12 @@ def handle_whatsapp_logic(data):
                                     lng=lng
                                 )
 
-                                # If the engine successfully identified the location via either path
-                                if geo_check.get("found"):
+                                # 🛡️ FIX: Ensure geo_check is a dict before calling .get()
+                                if isinstance(geo_check, list) and len(geo_check) > 0:
+                                    geo_check = geo_check  # Assume the first item is the result
+
+                                # Now proceed only if it's a valid dict
+                                if isinstance(geo_check, dict) and geo_check.get("found"):
                                     lat = geo_check.get("lat") or lat
                                     lng = geo_check.get("lng") or lng
                                     loc_display_name = geo_check.get("name") or geo_check.get(
