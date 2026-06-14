@@ -2492,25 +2492,19 @@ def calculate_distance(lat1, lon1, lat2, lon2):
 
 def send_location_request(recipient_number: str, body_text: str) -> dict:
     """
-    Sends the Meta Native Location Picker button to a WhatsApp user.
-    Ensures phone numbers are strictly formatted and environment variables are pulled accurately.
+    Sends a plain text location request — works universally across all accounts.
     """
-    # 🧼 Ensure number is stripped of spaces, dashes, and leading plus symbols
+    # 🧼 Clean number
     clean_number = re.sub(r"\D", "", recipient_number.strip())
-
-    # Safety Check: Meta expects country codes (like 234) without leading zeros
     if clean_number.startswith("0") and len(clean_number) == 11:
         clean_number = f"234{clean_number[1:]}"
 
-    # 🔗 Build dynamic Meta Graph API URL (Fallback to standard fallback v17.0 if version isn't set)
     api_version = globals().get("FB_API_VERSION", "v17.0")
-
-    # 🎯 Pull active production credentials from configuration
     phone_id = globals().get("PHONE_NUMBER_ID")
     access_token = globals().get("ACCESS_TOKEN") or globals().get("WHATSAPP_TOKEN")
 
     if not phone_id or not access_token:
-        logger.error("❌ Configuration Error: PHONE_NUMBER_ID or WHATSAPP_TOKEN is missing from variables.")
+        logger.error("❌ Configuration Error: PHONE_NUMBER_ID or ACCESS_TOKEN missing.")
         return {"error": "Missing API configuration credentials"}
 
     url = f"https://graph.facebook.com/{api_version}/{phone_id}/messages"
@@ -2520,44 +2514,39 @@ def send_location_request(recipient_number: str, body_text: str) -> dict:
         "Content-Type": "application/json"
     }
 
-    # 🗺️ Strict Meta JSON payload structure for location_request_message
+    # ✅ Plain text payload — works on all accounts without verification
     payload = {
         "messaging_product": "whatsapp",
         "recipient_type": "individual",
         "to": clean_number,
-        "type": "interactive",
-        "interactive": {
-            "type": "location_request_message",
-            "body": {
-                "text": body_text
-            },
-            "action": {
-                "name": "send_location"  # 🛑 CRITICAL: Must be exactly this string literal
-            }
+        "type": "text",
+        "text": {
+            "body": body_text
         }
     }
 
     try:
-        logger.info(f"📍 Dispatching Native Location request to: {clean_number}")
+        logger.info(f"📍 Dispatching location request to: {clean_number}")
         response = requests.post(url, json=payload, headers=headers, timeout=5.0)
 
-        # Log out raw responses immediately if anything goes wrong
         if response.status_code != 200:
-            logger.error(f"❌ Meta API Rejection Status {response.status_code}: {response.text}")
+            logger.error(f"❌ Meta API Error {response.status_code}: {response.text}")
 
         response.raise_for_status()
-
         res_data = response.json()
-        logger.info(
-            f"✅ Location prompt successfully pushed. Message ID: {res_data.get('messages', [{}]).get('id', 'N/A')}")
+
+        # ✅ Fixed: messages is a list, access index 0
+        messages = res_data.get('messages', [])
+        msg_id = messages[0].get('id', 'N/A') if messages else 'N/A'
+        logger.info(f"✅ Location request sent. Message ID: {msg_id}")
         return res_data
 
     except requests.exceptions.Timeout:
-        logger.error(f"⏳ Connection timeout while hitting Meta Graph API endpoint for {clean_number}.")
+        logger.error(f"⏳ Timeout sending location request to {clean_number}.")
         return {"error": "Meta API request timed out"}
 
     except Exception as e:
-        logger.error(f"💥 Failed to complete location request transaction to {clean_number}: {e}")
+        logger.error(f"💥 Failed to send location request to {clean_number}: {e}")
         return {"error": str(e)}
 
 
