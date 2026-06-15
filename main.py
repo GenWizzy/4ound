@@ -143,7 +143,19 @@ ID_MAP_PATH = "id_map.json"            # The list of IDs
 
 embeddings_matrix = None
 id_maps: Dict[str, List[str]] = {"default": []}
+def initialize_embeddings():
+    global embeddings_matrix, id_maps
+    try:
+        # Load your saved .npy and .json files
+        embeddings_matrix = np.load("embeddings.npy")
+        with open("id_map.json", "r") as f:
+            id_maps = json.load(f)
+        logger.info(f"✅ Embeddings matrix loaded: {len(embeddings_matrix)} vectors.")
+    except Exception as e:
+        logger.error(f"❌ Failed to load embeddings: {e}")
 
+# IMPORTANT: Call it once at the module level
+initialize_embeddings()
 # -------------------------
 # Flask app setup
 # -------------------------
@@ -1322,15 +1334,15 @@ def rebuild_index_from_firestore():
             logger.warning("⚠️ No embeddings found. Index not updated.")
             return
 
-        # 🧬 NumPy conversion (Much lighter than FAISS)
-        new_matrix = np.array(embeddings_list, dtype=np.float32)
+        # 🧬 NumPy conversion (Optimized to float16)
+        # float16 uses 2 bytes per value instead of 4, cutting RAM usage by 50%
+        new_matrix = np.array(embeddings_list, dtype=np.float16)
 
-        # L2 Normalization (Essential for Cosine Similarity)
-        norms = np.linalg.norm(new_matrix, axis=1, keepdims=True)
-        new_matrix = new_matrix / norms
+        # L2 Normalization
+        norms = np.linalg.norm(new_matrix.astype(np.float32), axis=1, keepdims=True)
+        new_matrix = (new_matrix.astype(np.float32) / norms).astype(np.float16)
 
         # --- 3. THE ATOMIC SWAP ---
-        # No need for locks; simply update the global references
         embeddings_matrix = new_matrix
         id_maps["default"] = id_map_local
 
@@ -1395,16 +1407,27 @@ def search_offers_firestore(query, user_lat=None, user_lng=None, top_k=5,
                             offset=0,
                             category_id=None, entry_type="service",
                             search_key="default", required_types=None):
-    # 1. Global declaration at the very top
     global embeddings_matrix, id_maps
 
-    # 2. Defensive Guard
+    # --- SELF-HEALING GUARD ---
+    # If the matrix is missing (common in fresh worker processes),
+    # reload it once before proceeding.
     if embeddings_matrix is None or len(embeddings_matrix) == 0:
-        logger.error("❌ CRITICAL: No embeddings matrix loaded.")
-        return [], 0
+        logger.warning("⚠️ Embeddings matrix lost. Attempting emergency reload...")
+        try:
+            # Re-run your loader logic here
+            embeddings_matrix = np.load("embeddings.npy")
+            with open("id_map.json", "r") as f:
+                id_maps = json.load(f)
+            logger.info(f"✅ Emergency load successful: {len(embeddings_matrix)} vectors.")
+        except Exception as e:
+            logger.error(f"❌ CRITICAL: Could not recover embeddings: {e}")
+            return [], 0
 
+    # Now we are safe to proceed
     id_map = id_maps.get("default", [])
     logger.info(f"🧠 Embeddings Status: {len(embeddings_matrix)} vectors present.")
+
 
     # --- STEP 1: NumPy Semantic Retrieval ---
     # (No second global or second check needed here)
