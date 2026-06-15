@@ -2,51 +2,40 @@ import os
 import math
 import threading
 import logging
-from logging.handlers import RotatingFileHandler
-from datetime import datetime
-from flask import Flask, request, jsonify
-from dotenv import load_dotenv
-import requests
-import joblib
+import json
 import hashlib
 import time
-from collections import deque
-from geopy.geocoders import Nominatim
 import sys
 import io
 import urllib.parse
 import random
-from google import genai
-from typing import Union
-from google.api_core import retry as g_retry
-from datetime import datetime, timedelta, timezone
 import uuid
-from better_profanity import profanity
 import re
-from google.genai import types
-from google.cloud.firestore_v1.base_query import FieldFilter
-# ML / DB imports
+from logging.handlers import RotatingFileHandler
+from datetime import datetime, timedelta, timezone
+from collections import deque
+from typing import Union, Dict, List
 
-import json
-from google.cloud import firestore
+# Flask & External Services
+from flask import Flask, request, jsonify
+from dotenv import load_dotenv
+import requests
+from geopy.geocoders import Nominatim
+from better_profanity import profanity
 from langdetect import detect, LangDetectException
-from google.oauth2 import service_account
-# Training imports
-import pandas as pd
-from google.api_core import exceptions
+from rapidfuzz import process, fuzz
+
+# Google Cloud & AI
+from google import genai
+from google.genai import types
+from google.api_core import retry as g_retry, exceptions
+from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
-from typing import Dict, List
-
-
-
+from google.oauth2 import service_account
 
 # Scheduler
 from apscheduler.schedulers.background import BackgroundScheduler
 
-model = None
-EMBED_DIM = None
-
-from rapidfuzz import process, fuzz
 
 
 # Initialize the model at start-up.
