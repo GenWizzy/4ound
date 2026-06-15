@@ -1326,8 +1326,8 @@ def search_offers_firestore(query, user_lat=None, user_lng=None, top_k=5,
     for c in candidates:
         final_score = c["base_score"]
         logger.info(f"🔍 Candidate: {c.get('provider_name')} | Score: {final_score} | Threshold: {SCORE_THRESHOLD}")
-        if final_score > SCORE_THRESHOLD:
-            logger.info(f"🚫 Rejected: {c.get('provider_name')}")
+        if final_score < SCORE_THRESHOLD:
+            logger.info(f"🚫 Rejected (Score too low): {c.get('provider_name')} | Score: {final_score}")
             continue
 
         # 1. Product/Service Keyword Logic
