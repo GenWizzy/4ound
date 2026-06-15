@@ -30,7 +30,8 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 from sentence_transformers import SentenceTransformer
 from transformers import logging as hf_logging #hugging face logging
 import numpy as np
-import faiss
+import numpy as np
+from sklearn.metrics.pairwise import cosine_similarity
 import json
 from google.cloud import firestore
 from langdetect import detect, LangDetectException
@@ -39,7 +40,7 @@ from google.oauth2 import service_account
 import pandas as pd
 from google.api_core import exceptions
 from google.cloud.firestore_v1.base_query import FieldFilter
-
+from typing import Dict, List
 
 
 
@@ -126,10 +127,17 @@ hf_logging.set_verbosity_error()  # Keep huggingface logs quiet
 console_handler.setFormatter(file_formatter)
 logger.addHandler(console_handler)
 
-FAISS_INDEX_PATH = "faiss.index"
-faiss_indexes = {"default": None}
-id_maps = {"default": []}
-FAISS_IDMAP_PATH = "faiss_id_map.json"
+# 📂 Persistent storage paths
+EMBEDDINGS_DATA_PATH = "embeddings.npy"  # The raw matrix
+ID_MAP_PATH = "id_map.json"            # The list of IDs
+
+# 📦 Global storage (The matrix and the list)
+# We initialize them as None/Empty; they will be loaded on startup
+
+
+embeddings_matrix = None
+id_maps: Dict[str, List[str]] = {"default": []}
+
 # -------------------------
 # Flask app setup
 # -------------------------
@@ -396,13 +404,11 @@ service_roles = [
 # supports optional currency symbols, commas, decimals, k/m suffixes
 PRICE_RE = r"(?:(?:n|₦|\$|€|£)\s?)?(\d{1,3}(?:[,\s]\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)([kKmM])?\b"
 
-# FAISS index and id_map stored in dictionaries
-index_lock = threading.Lock()
+# 🚀 Global data storage
+# Instead of an index object, we store the raw matrix of all embeddings
+embeddings_matrix = None
+id_map = [] # A simple list of IDs corresponding to the rows in the matrix
 
-# These dictionaries hold your indexes.
-# "default" acts as your main index.
-faiss_indexes = {"default": None}
-id_maps = {"default": []}
 
 def parse_price(text, default_locale=None):
     t = text.lower()
@@ -1143,7 +1149,8 @@ def handle_search_intent(from_number: str, text: str, phone_number_id: str,
         logger.exception("handle_search_intent failed for %s", from_number)
         return False, "Error processing your request."
 # -------------------------
-# Firestore + Embeddings + FAISS setup\
+# -------------------------
+# Firestore setup
 # -------------------------
 # Firestore client uses GOOGLE_APPLICATION_CREDENTIALS env var
 # Thread-safe lazy Firestore client
@@ -1244,162 +1251,136 @@ def get_embed_dim():
     return EMBED_DIM
 
 
-
-
-
-
-
-def save_faiss_index():
-    global index, id_map
+def save_simple_index():
+    global embeddings_matrix, id_maps
 
     try:
-        with index_lock:
-            # 1. Save the numerical index
-            faiss.write_index(index, FAISS_INDEX_PATH)
+        # 1. Save the matrix to a binary .npy file (very fast and efficient)
+        np.save(EMBEDDINGS_DATA_PATH, embeddings_matrix)
 
-            # 2. Save the ID mapping (JSON is safer for human-readability/debugging)
-            with open(FAISS_IDMAP_PATH, "w", encoding="utf-8") as f:
-                json.dump(id_map, f, indent=4)
+        # 2. Save the ID mapping
+        with open(ID_MAP_PATH, "w", encoding="utf-8") as f:
+            json.dump(id_maps["default"], f, indent=4)
 
-        logger.info(f"💾 FAISS index and ID Map ({len(id_map)} items) saved to disk.")
+        logger.info(f"💾 Embeddings matrix and ID Map ({len(id_maps['default'])} items) saved to disk.")
 
     except Exception:
-        logger.exception("❌ Failed to save FAISS index or ID map.")
+        logger.exception("❌ Failed to save embeddings or ID map.")
 
 
-def load_faiss_from_disk():
-    global faiss_indexes, id_maps  # Ensure these are accessible
+def load_simple_index():
+    global embeddings_matrix, id_maps
 
-    if not os.path.exists(FAISS_INDEX_PATH):
-        logger.info("No FAISS index found on disk")
+    if not os.path.exists(EMBEDDINGS_DATA_PATH):
+        logger.info("No embeddings data found on disk.")
         return False
 
     try:
-        with index_lock:
-            # Load into the 'default' key
-            faiss_indexes["default"] = faiss.read_index(FAISS_INDEX_PATH)
+        # 1. Load the binary matrix back into RAM
+        embeddings_matrix = np.load(EMBEDDINGS_DATA_PATH)
 
-            with open(FAISS_IDMAP_PATH, "r") as f:
-                # Use slice assignment to clear and update the existing list
-                id_maps["default"][:] = json.load(f)
+        # 2. Load the ID map
+        with open(ID_MAP_PATH, "r") as f:
+            id_maps["default"] = json.load(f)
 
-        logger.info("Loaded FAISS index from disk (%d vectors)", faiss_indexes["default"].ntotal)
+        logger.info("Loaded embeddings from disk (%d vectors)", len(id_maps["default"]))
         return True
     except Exception:
-        logger.exception("Failed to load FAISS index")
+        logger.exception("Failed to load embeddings")
         return False
 
 
 def rebuild_index_from_firestore():
-    # 🕵️ Update these to the dictionary names we now use globally
-    global faiss_indexes, id_maps
-    logger.info("🚀 Starting FAISS rebuild (Thread-Safe + Anti-Loop)...")
+    global embeddings_matrix, id_maps
+    logger.info("🚀 Starting memory-optimized rebuild (NumPy)...")
 
     try:
         embeddings_list = []
         id_map_local = []
-        batch_size = 50
-        last_doc = None
-
-        # Retry logic for network resilience
-        retry_count = 0
-        max_retries = 5
-
-        # --- 1. DATA COLLECTION LOOP (Optimized for Memory) ---
-        # Don't use a 'while True' loop with 'start_after' if you can avoid it.
-        # Use .stream() which is a generator that fetches one-by-one.
 
         query = db.collection(FIRESTORE_OFFERS).where(filter=FieldFilter("indexed", "==", True))
 
-        # .stream() is a generator; it doesn't load everything into RAM!
-        docs_stream = query.stream()
-
-        for doc in docs_stream:
+        # Generator for memory-efficient iteration
+        for doc in query.stream():
             data = doc.to_dict()
 
-            # 🛡️ THE SURGICAL GATE:
+            # 🛡️ The Surgical Gate
             l_type = data.get("listing_type") or data.get("entry_type", "service")
-            is_verified = data.get("is_verified", False)
-
-            if l_type == "quick_sale" and not is_verified:
+            if l_type == "quick_sale" and not data.get("is_verified", False):
                 continue
 
-            # 🧬 Extract the vector
             emb = data.get("embedding")
             if emb:
-                embeddings_list.append(np.array(emb, dtype=np.float32))
+                embeddings_list.append(emb)
                 id_map_local.append(doc.id)
 
-            # 💡 Memory management: Log progress every 50 to track sync, not to hold RAM
-            if len(id_map_local) % 50 == 0:
-                logger.info(f"📥 Batch progress: {len(id_map_local)} vectors processed.")
+            if len(id_map_local) > 0 and len(id_map_local) % 50 == 0:
+                logger.info(f"📥 Batch received. Total synced: {len(id_map_local)}")
 
-        # --- 2. FAISS BUILD (Heavy CPU Work) ---
         if not embeddings_list:
             logger.warning("⚠️ No embeddings found. Index not updated.")
             return
 
-        dim = get_embed_dim()
-        new_index = faiss.IndexFlatIP(dim)
-        final_matrix = np.vstack(embeddings_list)
-        faiss.normalize_L2(final_matrix)
-        new_index.add(final_matrix)
+        # 🧬 NumPy conversion (Much lighter than FAISS)
+        new_matrix = np.array(embeddings_list, dtype=np.float32)
 
-        # --- 3. THE "GOLDEN" THREAD-SAFE SWAP ---
-        with index_lock:
-            # Update the dictionary reference
-            faiss_indexes["default"] = new_index
+        # L2 Normalization (Essential for Cosine Similarity)
+        norms = np.linalg.norm(new_matrix, axis=1, keepdims=True)
+        new_matrix = new_matrix / norms
 
-            # 🔥 Update the specific list object inside the dictionary
-            id_maps["default"].clear()
-            id_maps["default"].extend(id_map_local)
+        # --- 3. THE ATOMIC SWAP ---
+        # No need for locks; simply update the global references
+        embeddings_matrix = new_matrix
+        id_maps["default"] = id_map_local
 
-        logger.info("✅ FAISS index rebuilt successfully")
+        # Save to disk
+        save_simple_index()
 
+        logger.info("✅ Embeddings matrix rebuilt successfully")
 
     except Exception:
-        logger.exception("❌ CRITICAL: Unhandled error in FAISS rebuild")
+        logger.exception("❌ CRITICAL: Unhandled error in rebuild")
 
 
-def save_offer_to_firestore(provider_name, description, contact_whatsapp, lat, lng, biz_name=None, entry_type="service"):
+def save_offer_to_firestore(provider_name, description, contact_whatsapp, lat, lng, biz_name=None,
+                            entry_type="service"):
     """
-    Saves a listing to Firestore with a type flag ('service' or 'job')
-    and immediately updates the FAISS index.
+    Saves a listing to Firestore and performs a lightweight memory update.
     """
+    global embeddings_matrix, id_maps
     try:
         # 1. Generate the embedding
-        # FAISS will link meanings (e.g., 'fix cars' to 'Mechanic')
         emb = model.encode([description], convert_to_numpy=True).astype(np.float32)
 
-        # 2. Prepare the Firestore Document
-        doc_ref = db.collection(FIRESTORE_OFFERS).document()
+        # 2. Normalize immediately
+        emb_norm = emb.copy() / np.linalg.norm(emb)
 
+        # 3. Prepare the Firestore Document
+        doc_ref = db.collection(FIRESTORE_OFFERS).document()
         offer_data = {
-            "entry_type": entry_type,           # 👈 'service' for providers, 'job' for vacancies
+            "entry_type": entry_type,
             "provider_name": biz_name or provider_name,
             "description": description,
             "contact_whatsapp": contact_whatsapp,
             "latitude": float(lat) if lat else None,
             "longitude": float(lng) if lng else None,
-            "embedding": emb.tolist(),
+            "embedding": emb.tolist(),  # Save the un-normalized version to DB
             "indexed": True,
             "created_at": time.time(),
             "updated_at": time.time()
         }
-
-        # Save to DB
         doc_ref.set(offer_data)
 
-        # 3. Hot-Update the FAISS index
-        emb_norm = emb.copy().reshape(1, -1)
-        faiss.normalize_L2(emb_norm)
+        # 4. Update the in-memory matrix (Lightweight NumPy Append)
+        if embeddings_matrix is not None:
+            embeddings_matrix = np.vstack([embeddings_matrix, emb_norm])
+            id_maps["default"].append(doc_ref.id)
 
-        with index_lock:
-            index.add(emb_norm)
-            id_map.append(doc_ref.id)
-
-            # Save the new index state to disk in the background
-            threading.Thread(target=save_faiss_index, daemon=True).start()
+            # Persist to disk
+            threading.Thread(target=save_simple_index, daemon=True).start()
+        else:
+            # If matrix was empty, rebuild completely
+            rebuild_index_from_firestore()
 
         logger.info(f"🚀 {entry_type.upper()} Live: {doc_ref.id} for {biz_name or provider_name}")
         return doc_ref.id
@@ -1409,71 +1390,55 @@ def save_offer_to_firestore(provider_name, description, contact_whatsapp, lat, l
         return None
 
 
-
 def search_offers_firestore(query, user_lat=None, user_lng=None, top_k=5,
-                            offset=0,  # 👈 ADD THIS
+                            offset=0,
                             category_id=None, entry_type="service",
                             search_key="default", required_types=None):
 
-    # 2. Grab data using the search_key instead of hardcoding "default"
-    global faiss_indexes, id_maps
-    index = faiss_indexes.get(search_key)
-    id_map = id_maps.get(search_key)
+    global embeddings_matrix, id_maps
 
     # 🛡️ DEFENSIVE GUARD
-    if index is None:
-        logger.error("❌ CRITICAL: search_offers_firestore could not find 'default' index in dictionary.")
+    if embeddings_matrix is None or len(embeddings_matrix) == 0:
+        logger.error("❌ CRITICAL: No embeddings matrix loaded.")
         return [], 0
 
-    # 🔍 THIS LOG WILL NOW SHOW THE UPDATED COUNT AUTOMATICALLY
-    logger.info(f"🧠 FAISS Index Status: {index.ntotal} vectors present.")
+    id_map = id_maps.get("default", [])
+    logger.info(f"🧠 Embeddings Status: {len(embeddings_matrix)} vectors present.")
 
-    if index.ntotal == 0:
-        logger.warning("⚠️ Search skipped: Index has 0 vectors.")
+    # --- STEP 1: NumPy Semantic Retrieval (REPLACES FAISS) ---
+    global embeddings_matrix, id_maps
+    if embeddings_matrix is None:
+        logger.warning("⚠️ Search skipped: Embeddings matrix not loaded.")
         return [], 0
 
+    # 1. Encode query and normalize
+    q_emb = get_embedding_model().encode([query], convert_to_numpy=True).astype(np.float32)
+    q_norm = q_emb / np.linalg.norm(q_emb)
 
-    # --- STEP 1: FAISS Semantic Retrieval ---
-    q_emb = model.encode([query], convert_to_numpy=True).astype(np.float32)
-    faiss.normalize_L2(q_emb.reshape(1, -1))
+    # 2. Compute similarity matrix
+    scores = np.dot(embeddings_matrix, q_norm.T).flatten()
 
-    with index_lock:
-        retrieve_k = 100
-        D, I = index.search(q_emb.reshape(1, -1), retrieve_k)
+    # 3. Get top 100 indices
+    retrieve_k = min(100, len(scores))
+    top_indices = np.argsort(scores)[::-1][:retrieve_k]
 
-    # 🚀 FIXED: Removed the (I == -1).any() kill switch
-    # We only abort if FAISS returns literally nothing (None or empty array)
-    if I is None or I.size == 0:
-        logger.warning("🔍 FAISS returned no data structure.")
-        return [], 0
-
-    # --- THE CRITICAL FIX: Use .flatten() to ensure these are 1D lists ---
-    dist_list = D.flatten()
-    idx_list = I.flatten()
-
+    # 4. Map to doc IDs
+    id_map = id_maps.get("default", [])
     doc_refs = []
     score_map = {}
 
-    for score, idx in zip(dist_list, idx_list):
-        idx_int = int(idx)
-
-        # ✅ This is the correct place to handle the -1 padding!
-        if idx_int < 0:
+    for idx in top_indices:
+        idx_int = int(idx)  # ✅ Convert numpy int to Python int
+        if idx_int >= len(id_map):
             continue
-
-
-        doc_id = None
-        if idx_int < len(id_map):
-            doc_id = id_map[idx_int]
-
-        # --- THE FIX: Skip deleted markers ---
-        if not doc_id or doc_id == "DELETED_MARKER":
+        d_id = id_map[idx_int]
+        if not d_id or d_id == "DELETED_MARKER":
             continue
-
-        # Queue for Firestore Batch retrieval
-        ref = db.collection(FIRESTORE_OFFERS).document(doc_id)
+        if not isinstance(d_id, str):  # ✅ Guard against list/non-string
+            continue
+        ref = db.collection(FIRESTORE_OFFERS).document(d_id)
         doc_refs.append(ref)
-        score_map[doc_id] = float(score)
+        score_map[d_id] = float(scores[idx_int])  # Updated here
 
     candidates = []
     now = datetime.now(timezone.utc)  # 🚀 Track current time
@@ -3186,7 +3151,7 @@ def perform_smart_search(smart_data, lat, lng):
         if cat_id != "product":
             logger.info(f"🛡️ Guard: Overriding category '{cat_id}' to 'product' for query '{search_query}'")
             cat_id = "product"
-            search_key = "default"  # Ensure we use the correct FAISS index
+            # Removed: search_key = "default"
 
     logger.info(
         f"⚡ Dispatcher Active Routing: Intent='{predicted_intent}' | Query='{search_query}' | Forced Category='{cat_id}'")
@@ -3267,10 +3232,9 @@ def perform_smart_search(smart_data, lat, lng):
 
         # --- INTERNAL MARKET SEARCH (Services & Quick Sales) ---
 
-        search_key = "default" if (cat_id == "product" or cat_id is None) else cat_id
-
-        if search_key not in faiss_indexes:
-            search_key = "default"
+        # No longer need to check an index dictionary.
+        # The search_offers_firestore function now handles the search logic.
+        search_key = "default"
 
         # ✅ STRIKE 1: Strict Category Search
 
@@ -3281,7 +3245,6 @@ def perform_smart_search(smart_data, lat, lng):
             offset=0,
             top_k=100,
             category_id=cat_id,
-            search_key=search_key,
             entry_type=cat_id
         )
 
@@ -3840,7 +3803,7 @@ def process_pending_verifications():
 
         logger.info(f"🔄 Processing Listing ID: {doc.id}")
 
-        # 🚀 THE WORKER: Handles Gemini + FAISS + WhatsApp
+         # 🚀 THE WORKER: Handles Gemini, Vector Indexing + WhatsApp
         try:
             verify_and_publish_listing(doc.id)
         except Exception as e:
@@ -3898,17 +3861,29 @@ def verify_and_publish_listing(doc_id):
             # ✅ Step A: Update Firestore with the fresh timestamps
             doc_ref.update(update_payload)
 
-            # ✅ Step B: PUSH TO LIVE FAISS INDEX
+            # ✅ Step B: PUSH TO LIVE MATRIX
             if embedding:
                 try:
-                    emb_np = np.array([embedding], dtype=np.float32)
-                    faiss.normalize_L2(emb_np)
-                    with index_lock:
-                        index.add(emb_np)
-                        id_map.append(doc_id)
-                    logger.info(f"🚀 INSTANT LIVE: Listing {doc_id} added to FAISS.")
-                except Exception as faiss_e:
-                    logger.error(f"❌ FAISS Error: {faiss_e}")
+                    global embeddings_matrix, id_maps
+
+                    # 1. Normalize the new vector
+                    emb_np = np.array(embedding, dtype=np.float32).reshape(1, -1)
+                    emb_norm = emb_np / np.linalg.norm(emb_np)
+
+                    # 2. Append to the matrix
+                    if embeddings_matrix is not None:
+                        embeddings_matrix = np.vstack([embeddings_matrix, emb_norm])
+                        id_maps["default"].append(doc_id)
+
+                        # 3. Save state to disk
+                        save_simple_index()
+                        logger.info(f"🚀 INSTANT LIVE: Listing {doc_id} added to Embeddings Matrix.")
+                    else:
+                        # Fallback: rebuild if matrix was lost
+                        rebuild_index_from_firestore()
+
+                except Exception as e:
+                    logger.error(f"❌ Matrix Update Error: {e}")
 
             # ✅ Step C: Notify User (Only if within 24h window)
             if can_notify and user_id:
@@ -4163,46 +4138,40 @@ def get_user_listings(phone_number):
 
 
 def perform_actual_deletion(offer_id, owner_phone):
-    """Securely removes listing and updates index."""
-    # 🕵️ Point to the dictionary we use for the rest of the app
-    global id_maps
+    """Securely removes listing and updates NumPy matrix."""
+    global embeddings_matrix, id_maps
 
     try:
         doc_ref = db.collection("listings").document(offer_id)
         doc = doc_ref.get()
 
         if not doc.exists:
-            logger.error(f"⚠️ Attempted to delete non-existent ID: {offer_id}")
             return False
 
         if doc.to_dict().get("owner_phone") != owner_phone:
-            logger.error(f"🚨 SECURITY: {owner_phone} tried to delete {offer_id}")
             return False
 
         # 1. DELETE from Firestore
         doc_ref.delete()
         logger.info(f"🔥 Firestore document {offer_id} deleted.")
 
-        # 2. Update the Dictionary-based FAISS Mapping
-        with index_lock:
-            # We target the 'default' map specifically
-            current_map = id_maps.get("default", [])
-            found = False
+        # 2. Update the NumPy Matrix and ID Map
+        # Find the index of the ID in our map
+        if offer_id in id_maps["default"]:
+            idx = id_maps["default"].index(offer_id)
 
-            for i, mapped_id in enumerate(current_map):
-                if mapped_id == offer_id:
-                    current_map[i] = "DELETED_MARKER"  # 👻 Ghost marker
-                    found = True
-                    break
+            # Remove the ID from the list
+            id_maps["default"].pop(idx)
 
-            if not found:
-                logger.warning(f"⚠️ ID {offer_id} not found in id_maps['default'].")
+            # Remove the corresponding row from the NumPy matrix
+            embeddings_matrix = np.delete(embeddings_matrix, idx, axis=0)
 
-        # 3. 🚀 THE MISSING STEP: Trigger a full rebuild
-        # This cleans the "DELETED_MARKERs" out and shrinks the vector count
-        threading.Thread(target=rebuild_index_from_firestore).start()
+            # Persist the change immediately
+            save_simple_index()
+            logger.info(f"✅ Matrix updated for deleted ID: {offer_id}")
 
         return True
+
     except Exception as e:
         logger.error(f"❌ Deletion failure: {e}")
         return False
@@ -4211,9 +4180,7 @@ def perform_actual_deletion(offer_id, owner_phone):
 def nightly_cleanup():
     logger.info("🧹 Starting scheduled maintenance: Purging expired listings...")
 
-    # ✅ Use actual datetime object for Firestore Timestamp comparison
     now_utc = datetime.now(timezone.utc)
-
     expired_docs = (
         db.collection(FIRESTORE_OFFERS)
         .where("expires_at", "<", now_utc)
@@ -4221,49 +4188,45 @@ def nightly_cleanup():
     )
 
     count = 0
-
     for doc in expired_docs:
-        data = doc.to_dict()
-        owner_phone = data.get("owner_phone")
-
-        logger.info(f"🗑️ Expired listing found: {doc.id}")
-
-        success = perform_actual_deletion_silent(doc.id, owner_phone)
-
-        if success:
+        # Assuming perform_actual_deletion_silent uses the same logic
+        # we just updated in perform_actual_deletion
+        if perform_actual_deletion_silent(doc.id, doc.to_dict().get("owner_phone")):
             count += 1
+            logger.info(f"🗑️ Purged expired: {doc.id}")
 
     if count > 0:
-        logger.info(f"✨ Purge complete. {count} expired listings removed. Rebuilding FAISS index...")
-        threading.Thread(target=rebuild_index_from_firestore).start()
+        logger.info(f"✨ Purge complete. {count} expired listings removed and matrix updated.")
     else:
         logger.info("✅ Cleanup check complete: No expired listings to remove.")
 
 
-
 def perform_actual_deletion_silent(offer_id, owner_phone):
     """Internal version of deletion that unifies collection references."""
+    global id_maps, embeddings_matrix
     try:
-        # 🔑 FIXED: Use the global configuration constant matching the search matrix
+        # 1. DELETE from Firestore
         doc_ref = db.collection(FIRESTORE_OFFERS).document(offer_id)
         doc_ref.delete()
         logger.info(f"🗑️ Background Eviction: Removed doc {offer_id} from {FIRESTORE_OFFERS}")
 
-        # Update the local ID map so the AI doesn't try to pull a deleted doc
-        global id_maps
-        with index_lock:
-            current_map = id_maps.get("default", [])
-            for i, mapped_id in enumerate(current_map):
-                if mapped_id == offer_id:
-                    current_map[i] = "DELETED_MARKER"
-                    break
+        # 2. Update the NumPy Matrix and ID Map directly
+        # No lock required — assignment is atomic in Python
+        if offer_id in id_maps.get("default", []):
+            idx = id_maps["default"].index(offer_id)
+
+            # Remove from the ID map and the NumPy matrix
+            id_maps["default"].pop(idx)
+            embeddings_matrix = np.delete(embeddings_matrix, idx, axis=0)
+
+            # Persist the change to disk
+            save_simple_index()
+            logger.info(f"✅ Matrix updated for deleted ID: {offer_id}")
+
         return True
     except Exception as e:
         logger.error(f"❌ Silent delete failed for {offer_id}: {e}")
         return False
-
-
-
 
 
 def get_market_insight(user_city="GLOBAL"):
@@ -7711,8 +7674,7 @@ def handle_whatsapp_logic(data):
                                         user_lng=lng,
                                         top_k=3,
                                         offset=current_offset,
-                                        entry_type="quick_job",
-                                        search_key="default"
+                                        entry_type="quick_job"
                                     )
 
                                     if isinstance(job_response, tuple):
