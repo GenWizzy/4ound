@@ -27,11 +27,6 @@ from google.genai import types
 from google.cloud.firestore_v1.base_query import FieldFilter
 # ML / DB imports
 
-from sentence_transformers import SentenceTransformer
-from transformers import logging as hf_logging #hugging face logging
-import numpy as np
-import numpy as np
-from sklearn.metrics.pairwise import cosine_similarity
 import json
 from google.cloud import firestore
 from langdetect import detect, LangDetectException
@@ -51,12 +46,11 @@ from apscheduler.schedulers.background import BackgroundScheduler
 model = None
 EMBED_DIM = None
 
-# At the top of main.py, near your other imports and global variables
-from sentence_transformers import SentenceTransformer
+from rapidfuzz import process, fuzz
+
 
 # Initialize the model at start-up.
 # It will consume memory once, but it won't crash on search requests.
-model = SentenceTransformer("sentence-transformers/paraphrase-MiniLM-L3-v2")
 # Zero-shot classifier for greeting/intent detection
 #zero_shot_pipeline = pipeline(
 #    "zero-shot-classification",
@@ -129,20 +123,10 @@ if sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 console_handler = logging.StreamHandler(sys.stdout)
-hf_logging.set_verbosity_error()  # Keep huggingface logs quiet
 console_handler.setFormatter(file_formatter)
 logger.addHandler(console_handler)
 
-# 📂 Persistent storage paths
-EMBEDDINGS_DATA_PATH = "embeddings.npy"  # The raw matrix
-ID_MAP_PATH = "id_map.json"            # The list of IDs
 
-# 📦 Global storage (The matrix and the list)
-# We initialize them as None/Empty; they will be loaded on startup
-
-
-embeddings_matrix = None
-id_maps: Dict[str, List[str]] = {"default": []}
 
 
 
@@ -1237,151 +1221,14 @@ def get_db():
         return _db
 
 
-
-def get_embedding_model():
-    global model
-    return model
-
-
-
-
-def get_embed_dim():
-    global EMBED_DIM
-    if EMBED_DIM is None:
-        m = get_embedding_model()
-        # This extracts the actual vector size (384 for MiniLM)
-        EMBED_DIM = m.get_sentence_embedding_dimension()
-    return EMBED_DIM
-
-
-def save_simple_index():
-    global embeddings_matrix, id_maps
-
-    try:
-        # 1. Save the matrix to a binary .npy file (very fast and efficient)
-        np.save(EMBEDDINGS_DATA_PATH, embeddings_matrix)
-
-        # 2. Save the ID mapping
-        with open(ID_MAP_PATH, "w", encoding="utf-8") as f:
-            json.dump(id_maps, f, indent=4)
-
-        logger.info(f"💾 Embeddings matrix and ID Map ({len(id_maps['default'])} items) saved to disk.")
-
-    except Exception:
-        logger.exception("❌ Failed to save embeddings or ID map.")
-
-
-def load_simple_index():
-    global embeddings_matrix, id_maps
-
-    if not os.path.exists(EMBEDDINGS_DATA_PATH):
-        logger.info("No embeddings data found on disk.")
-        return False
-
-    try:
-        # 1. Load the binary matrix back into RAM
-        embeddings_matrix = np.load(EMBEDDINGS_DATA_PATH)
-
-        # 2. Load the ID map
-        with open(ID_MAP_PATH, "r") as f:
-            id_maps["default"] = json.load(f)
-
-        logger.info("Loaded embeddings from disk (%d vectors)", len(id_maps["default"]))
-        return True
-    except Exception:
-        logger.exception("Failed to load embeddings")
-        return False
-
-
-def rebuild_index_from_firestore():
-    global embeddings_matrix, id_maps
-    logger.info("🚀 Starting memory-optimized rebuild (NumPy)...")
-
-    try:
-        embeddings_list = []
-        id_map_local = []
-
-        query = db.collection(FIRESTORE_OFFERS).where(filter=FieldFilter("indexed", "==", True))
-
-        # Generator for memory-efficient iteration
-        for doc in query.stream():
-            data = doc.to_dict()
-
-            # 🛡️ The Surgical Gate
-            l_type = data.get("listing_type") or data.get("entry_type", "service")
-            if l_type == "quick_sale" and not data.get("is_verified", False):
-                continue
-
-            emb = data.get("embedding")
-            if emb:
-                embeddings_list.append(emb)
-                id_map_local.append(doc.id)
-
-            if len(id_map_local) > 0 and len(id_map_local) % 50 == 0:
-                logger.info(f"📥 Batch received. Total synced: {len(id_map_local)}")
-
-        if not embeddings_list:
-            logger.warning("⚠️ No embeddings found. Index not updated.")
-            return
-
-        # 🧬 NumPy conversion (Optimized to float16)
-        # float16 uses 2 bytes per value instead of 4, cutting RAM usage by 50%
-        new_matrix = np.array(embeddings_list, dtype=np.float16)
-
-        # L2 Normalization
-        norms = np.linalg.norm(new_matrix.astype(np.float32), axis=1, keepdims=True)
-        new_matrix = (new_matrix.astype(np.float32) / norms).astype(np.float16)
-
-        # --- 3. THE ATOMIC SWAP ---
-        embeddings_matrix = new_matrix
-        id_maps["default"] = id_map_local
-
-        # Save to disk
-        save_simple_index()
-
-        logger.info("✅ Embeddings matrix rebuilt successfully")
-
-    except Exception:
-        logger.exception("❌ CRITICAL: Unhandled error in rebuild")
-
-
-
-def initialize_embeddings():
-    global embeddings_matrix, id_maps
-
-    try:
-        embeddings_matrix = np.load(EMBEDDINGS_DATA_PATH)
-
-        with open(ID_MAP_PATH, "r", encoding="utf-8") as f:
-            id_maps = json.load(f)
-
-        logger.info(f"✅ Loaded {len(id_maps['default'])} embeddings")
-
-    except Exception as e:
-        logger.warning(f"⚠️ Embedding files missing or invalid: {e}")
-
-        try:
-            logger.info("🔄 Rebuilding from Firestore...")
-            rebuild_index_from_firestore()
-        except Exception:
-            logger.exception("❌ Failed to rebuild embeddings from Firestore")
-# IMPORTANT: Call it once at the module level
-initialize_embeddings()
-
 def save_offer_to_firestore(provider_name, description, contact_whatsapp, lat, lng, biz_name=None,
                             entry_type="service"):
     """
-    Saves a listing to Firestore and performs a lightweight memory update.
+    Saves a listing to Firestore. The search engine (RapidFuzz)
+    will automatically include this on the next search.
     """
-    global embeddings_matrix, id_maps
     try:
-        # 1. Generate the embedding
-        emb = model.encode([description], convert_to_numpy=True).astype(np.float32)
-
-        # 2. Normalize immediately
-        emb_norm = emb.copy() / np.linalg.norm(emb)
-
-        # 3. Prepare the Firestore Document
+        # Prepare the Firestore Document
         doc_ref = db.collection(FIRESTORE_OFFERS).document()
         offer_data = {
             "entry_type": entry_type,
@@ -1390,23 +1237,13 @@ def save_offer_to_firestore(provider_name, description, contact_whatsapp, lat, l
             "contact_whatsapp": contact_whatsapp,
             "latitude": float(lat) if lat else None,
             "longitude": float(lng) if lng else None,
-            "embedding": emb.tolist(),  # Save the un-normalized version to DB
             "indexed": True,
             "created_at": time.time(),
             "updated_at": time.time()
         }
+
+        # Save to Firestore
         doc_ref.set(offer_data)
-
-        # 4. Update the in-memory matrix (Lightweight NumPy Append)
-        if embeddings_matrix is not None:
-            embeddings_matrix = np.vstack([embeddings_matrix, emb_norm])
-            id_maps["default"].append(doc_ref.id)
-
-            # Persist to disk
-            threading.Thread(target=save_simple_index, daemon=True).start()
-        else:
-            # If matrix was empty, rebuild completely
-            rebuild_index_from_firestore()
 
         logger.info(f"🚀 {entry_type.upper()} Live: {doc_ref.id} for {biz_name or provider_name}")
         return doc_ref.id
@@ -1420,260 +1257,109 @@ def search_offers_firestore(query, user_lat=None, user_lng=None, top_k=5,
                             offset=0,
                             category_id=None, entry_type="service",
                             search_key="default", required_types=None):
-    global embeddings_matrix, id_maps
+    # --- STEP 1: RapidFuzz Retrieval ---
+    docs = db.collection(FIRESTORE_OFFERS).stream()
 
-    # --- SELF-HEALING GUARD ---
-    # If the matrix is missing (common in fresh worker processes),
-    # reload it once before proceeding.
-    if embeddings_matrix is None or len(embeddings_matrix) == 0:
-        logger.warning("⚠️ Embeddings matrix lost. Attempting emergency reload...")
-        try:
-            # Re-run your loader logic here
-            embeddings_matrix = np.load("embeddings.npy")
-            with open("id_map.json", "r") as f:
-                id_maps = json.load(f)
-            logger.info(f"✅ Emergency load successful: {len(embeddings_matrix)} vectors.")
-        except Exception as e:
-            logger.error(f"❌ CRITICAL: Could not recover embeddings: {e}")
-            return [], 0
+    all_docs = []
+    names_to_search = []
+    for doc in docs:
+        d = doc.to_dict()
+        d['id'] = doc.id
+        all_docs.append(d)
+        names_to_search.append(d.get('title') or d.get('biz_name') or d.get('provider_name') or "")
 
-    # Now we are safe to proceed
-    id_map = id_maps.get("default", [])
-    logger.info(f"🧠 Embeddings Status: {len(embeddings_matrix)} vectors present.")
-
-
-    # --- STEP 1: NumPy Semantic Retrieval ---
-    # (No second global or second check needed here)
-
-    # 1. Encode query and normalize
-    q_emb = get_embedding_model().encode([query], convert_to_numpy=True).astype(np.float32)
-    q_norm = q_emb / np.linalg.norm(q_emb)
-
-    # 2. Compute similarity matrix
-    scores = np.dot(embeddings_matrix, q_norm.T).flatten()
-
-    # 3. Get top 100 indices
-    retrieve_k = min(100, len(scores))
-    top_indices = np.argsort(scores)[::-1][:retrieve_k]
-
-    # 4. Map to doc IDs
-    id_map = id_maps.get("default", [])
-    doc_refs = []
-    score_map = {}
-
-    for idx in top_indices:
-        idx_int = int(idx)  # ✅ Convert numpy int to Python int
-        if idx_int >= len(id_map):
-            continue
-        d_id = id_map[idx_int]
-        if not d_id or d_id == "DELETED_MARKER":
-            continue
-        if not isinstance(d_id, str):  # ✅ Guard against list/non-string
-            continue
-        ref = db.collection(FIRESTORE_OFFERS).document(d_id)
-        doc_refs.append(ref)
-        score_map[d_id] = float(scores[idx_int])  # Updated here
+    fuzzy_matches = process.extract(query, names_to_search, scorer=fuzz.WRatio, limit=50)
 
     candidates = []
-    now = datetime.now(timezone.utc)  # 🚀 Track current time
-    if doc_refs:
-        docs = db.get_all(doc_refs)
+    now = datetime.now(timezone.utc)
+    score_map = {}
 
-        for doc in docs:
-            if not doc.exists:
+    for match_name, score, index in fuzzy_matches:
+        if score < 50: continue
+
+        data = all_docs[index]
+        firestore_doc_id = data['id']
+        score_map[firestore_doc_id] = score / 100.0
+        doc_type = data.get("entry_type") or data.get("listing_type", "service")
+
+        # 1. Type Filtering
+        if required_types and doc_type not in required_types: continue
+
+        # 2. Expiry Logic
+        expiry = data.get("expires_at") or data.get("expiry_date")
+        if expiry:
+            try:
+                expiry_dt = expiry.to_datetime().replace(tzinfo=timezone.utc) if hasattr(expiry,
+                                                                                         "to_datetime") else datetime.fromisoformat(
+                    str(expiry).replace("Z", "+00:00"))
+                if expiry_dt < now:
+                    threading.Thread(target=perform_actual_deletion_silent,
+                                     args=(firestore_doc_id, data.get("owner_phone"))).start()
+                    continue
+            except:
                 continue
 
-            data = doc.to_dict()
-            doc_type = data.get("entry_type") or data.get("listing_type", "service")
+        # 3. Verification Logic
+        if doc_type == "quick_sale" and not data.get("is_verified", False): continue
 
-            if required_types and doc_type not in required_types:
-                logger.info(f"❌ Rejected (Rescue Filter): {doc_type} not in {required_types}")
+        # 4. Category/Type Filtering
+        doc_category = data.get("category")
+        if category_id:
+            if category_id == "service" and doc_category not in ["service", "professional", "job", "provider"]:
+                continue
+            elif str(doc_category).lower() != str(category_id).lower():
                 continue
 
-            doc_category = data.get("category")
-            firestore_doc_id = doc.id  # Renamed from d_id
+        # ✅ PASSED ALL FILTERS
+        candidates.append({
+            "base_score": score_map[firestore_doc_id],
+            "priority": 1 if data.get("is_verified") else 2,
+            "id": firestore_doc_id,
+            "category": doc_category,
+            "visibility": data.get("visibility"),
+            "provider_name": data.get("title") or data.get("biz_name") or "Local Business",
+            "lat": data.get("location", {}).get("lat") or data.get("lat"),
+            "lng": data.get("location", {}).get("lng") or data.get("lng"),
+            "description": data.get("description", ""),
+            "entry_type": doc_type,
+            "compensation": data.get("compensation"),
+            "contact_whatsapp": data.get("contact_phone") or data.get("biz_phone") or data.get("contact_whatsapp"),
+            "image_id": data.get("image_id") or data.get("media_id")
+        })
 
-            logger.info(
-                f"🧪 Candidate: {data.get('title')} | "
-                f"Score: {score_map.get(firestore_doc_id)} | "
-                f"Category: {doc_category} | "
-                f"Type: {doc_type}"
-            )
-
-            # --- 1. NON-NEGOTIABLE BUSINESS RULES ---
-            expiry = data.get("expires_at") or data.get("expiry_date")
-            if expiry:
-                try:
-                    if isinstance(expiry, str):
-                        expiry_dt = datetime.fromisoformat(expiry.replace("Z", "+00:00"))
-                    elif hasattr(expiry, "to_datetime"):
-                        expiry_dt = expiry.to_datetime().replace(tzinfo=timezone.utc)
-                    else:
-                        expiry_dt = expiry
-
-                    if expiry_dt < now:
-                        logger.info(f"❌ Rejected (Expired): {firestore_doc_id}. Triggering immediate auto-delete.")
-                        threading.Thread(
-                            target=perform_actual_deletion_silent,
-                            args=(firestore_doc_id, data.get("owner_phone"))
-                        ).start()
-                        continue
-                except Exception as date_err:
-                    logger.error(f"⚠️ Expiry date parsing failed for doc {firestore_doc_id}: {str(date_err)}")
-
-            is_verified = data.get("is_verified", False)
-            if doc_type == "quick_sale" and not is_verified:
-                logger.info(f"❌ Rejected (Not verified): {firestore_doc_id}")
-                continue
-
-            # --- 2. DYNAMIC TYPE & CATEGORY FILTERING ---
-            valid_type_map = {
-                "service": ["service", "professional", "provider", "expert"],
-                "product": ["product", "quick_sale", "vendor", "retail"],
-                "job": ["job", "quick_job", "employment", "vacancy"],
-                "quick_job": ["quick_job", "job"],
-                "quick_sale": ["quick_sale", "product"]
-            }
-            allowed_types = valid_type_map.get(entry_type, [entry_type])
-
-            if doc_type not in allowed_types:
-                logger.info(f"❌ Rejected (Type mismatch): {doc_type} not in {allowed_types}")
-                continue
-
-            is_category_match = True
-            if category_id:
-                if category_id == "service" and doc_category in ["service", "professional", "job", "provider"]:
-                    is_category_match = True
-                elif str(doc_category).lower() != str(category_id).lower():
-                    is_category_match = False
-
-            if not is_category_match:
-                logger.info(f"❌ Rejected (Category mismatch): {doc_category} != {category_id}")
-                continue
-
-            # ✅ PASSED ALL FILTERS
-            logger.info(
-                f"✅ Accepted: {data.get('title')} | Score={score_map.get(firestore_doc_id)} | Category={doc_category} | Type={doc_type}")
-
-            candidates.append({
-                "base_score": score_map.get(firestore_doc_id, 0.0),
-                "priority": 1 if data.get("is_verified") else 2,
-                "id": firestore_doc_id,
-                "category": doc_category,
-                "visibility": data.get("visibility"),
-                "provider_name": data.get("job_title") or data.get("biz_name") or data.get("title") or data.get(
-                    "provider_name") or "Local Business",
-                "compensation": data.get("compensation"),
-                "lat": data.get("location", {}).get("lat") or data.get("lat"),
-                "lng": data.get("location", {}).get("lng") or data.get("lng"),
-                "contact_whatsapp": data.get("contact_phone") or data.get("biz_phone") or data.get("contact_whatsapp"),
-                "description": data.get("description", ""),
-                "entry_type": doc_type,
-                "image_id": data.get("image_id") or data.get("media_id")
-            })
-
-    # --- STEP 2: Proximity Filtering & Scoring ---
+    # --- STEP 2: Proximity & Relevance Scoring ---
+    scored = []
 
     # 🎯 Dynamic thresholds by marketplace type
-    if entry_type in ["product", "quick_sale"]:
-        SCORE_THRESHOLD = 0.60
+    SCORE_THRESHOLD = 0.60 if entry_type in ["product", "quick_sale"] else (
+        0.55 if entry_type in ["job", "quick_job"] else 0.30)
 
-    elif entry_type in ["job", "quick_job"]:
-        SCORE_THRESHOLD = 0.55
-
-    else:
-        # services/professionals
-        SCORE_THRESHOLD = 0.30
-
-    scored = []
     for c in candidates:
-
         final_score = c["base_score"]
 
-        # 🚀 NEW: THE JOB SEARCH BOOST
-        # If the user is specifically looking for work, give every job a lift
-        # Job boost applied AFTER keyword check, not before
-        # Will be applied below if keyword match exists
-
-        # --- PRODUCT TEXT MATCH GATE ---
-        # 🧼 Comprehensive keyword extraction loop including 'around' and 'near'
-        ignore_words = {
-            "looking", "need", "want", "buy", "sell", "nearby", "available",
-            "searching", "find", "show", "around", "near", "close", "area",
-            "please", "help", "give", "some", "with",
-            "job", "work", "vacancy", "hire", "hiring", "employment"
-        }
-
+        # 1. Product/Service Keyword Logic
+        ignore_words = {"looking", "need", "want", "buy", "sell", "nearby", "available", "searching", "find", "show",
+                        "around", "near", "close", "area", "please", "help", "give", "some", "with", "job", "work",
+                        "vacancy", "hire", "hiring", "employment"}
         query_words = [w for w in query.lower().split() if len(w) >= 3 and w not in ignore_words]
 
-        title_text = c.get("provider_name", "").lower()
-        desc_text = c.get("description", "").lower()
-        combined_text = f"{title_text} {desc_text}"
-
-        # Partial substring matching
-        keyword_overlap = [
-            w for w in query_words
-            if re.search(r'\b' + re.escape(w) + r'\b', combined_text)
-               or (len(w) > 4 and re.search(r'\b' + re.escape(w[:-1]) + r'\b', combined_text))
-        ]
-
-        # 🚨 HARD FILTER FOR PRODUCTS AND SERVICES
-        is_product = c.get("entry_type") in ["product", "quick_sale"]
-        is_service = c.get("entry_type") in ["professional", "service", "provider"]
-        is_job = c.get("entry_type") in ["quick_job", "job"]
-
-        # 🧠 True Root Stem Matching (Matches "design", "designs", "designer", "designing")
-        # Breaks down the listing text into individual clean words
-        candidate_words = [w.strip(".,!?()\"'") for w in combined_text.lower().split()]
-
-        has_stem_match = False
-        for q_word in query_words:
-            q_stem = q_word[:4]  # e.g., "desi", "grap"
-            for c_word in candidate_words:
-                if c_word.startswith(q_stem) or q_word.startswith(c_word[:4]):
-                    has_stem_match = True
-                    break
-            if has_stem_match:
-                break
-
-        if query_words and not keyword_overlap and not has_stem_match:
-            if is_product:
-                logger.info(f"❌ Rejected (No Product Keyword Match): {c.get('provider_name')}")
-                continue
-
-            elif is_service:
-                logger.info(f"❌ Rejected (No Service Keyword Match): {c.get('provider_name')}")
-                continue
-
-            elif is_job:
-                logger.info(f"❌ Rejected (No Job Keyword Match): {c.get('provider_name')}")
-                continue
+        combined_text = f"{c.get('provider_name', '').lower()} {c.get('description', '').lower()}"
+        keyword_overlap = [w for w in query_words if re.search(r'\b' + re.escape(w) + r'\b', combined_text)]
 
         # Soft relevance boost
         if keyword_overlap:
             boost = 0.45 if entry_type == "quick_job" else 0.15
             final_score -= boost
-            logger.info(
-                f"✨ Keyword Rescue applied to: "
-                f"{c.get('provider_name')} | overlap={keyword_overlap}"
-            )
 
-        # 2. Category Boosting (Existing logic)
-        item_cat = c.get("category")
+        # 2. Category Boosting
+        if category_id and str(c.get("category")) == str(category_id):
+            final_score -= 0.40
 
-        if category_id and str(item_cat) == str(category_id):
-            final_score -= 0.40  # 👈 Minus, not plus
-
-        # 3. Geospatial Scoring (Robustness Check)
-        # 🛡️ Get visibility status from the candidate 'c' or the original 'data'
-        # Note: Make sure you added 'visibility' to the 'candidates.append' block above!
-        is_remote = c.get("visibility") == "Remote Service"
-
+        # 3. Geospatial Scoring
         if user_lat and user_lng and c.get("lat") and c.get("lng"):
             try:
                 dist = calculate_distance(float(user_lat), float(user_lng), float(c["lat"]), float(c["lng"]))
                 c["distance"] = round(dist, 1)
-                logger.info(f"📍 {c.get('provider_name')}: {dist}km from user")
 
                 if dist <= 1.5:
                     final_score -= 0.70
@@ -1681,71 +1367,35 @@ def search_offers_firestore(query, user_lat=None, user_lng=None, top_k=5,
                     final_score -= 0.40
                 elif dist <= 15.0:
                     final_score -= 0.20
-                elif dist <= 30.0 and not is_remote:
-                    pass  # Neutral zone
-                elif dist <= 50.0 and not is_remote:
+                elif dist <= 50.0 and c.get("visibility") != "Remote Service":
                     final_score += 0.15
-                elif dist <= 100.0 and not is_remote:
-                    final_score += 0.35
-                elif dist > 100.0 and not is_remote:
+                elif dist > 100.0 and c.get("visibility") != "Remote Service":
                     final_score += 0.60
             except:
                 c["distance"] = 99999
         else:
             c["distance"] = 99999
 
-        # 🚦 FINAL intelligent semantic rejection AFTER boosts
-        is_product = c.get("entry_type") in ["product", "quick_sale"]
-
-        if is_product:
-            # 1. Outer limit boundary breach
-            if final_score > SCORE_THRESHOLD:
-                logger.info(
-                    f"❌ Rejected (Semantic Gap): {c.get('provider_name')} score {final_score:.4f} > {SCORE_THRESHOLD}")
-                continue
-
-            # 2. Strict Protection: If the raw vector match is weak or it's an outright different product,
-            # do not let a strong proximity score hide the fact that it doesn't match the user's explicit product keywords.
-            if c["base_score"] > 0.25 and not keyword_overlap:
-                logger.info(
-                    f"❌ Rejected (Unrelated Product Drift): {c.get('provider_name')} raw base vector score {c['base_score']:.4f} failed text verification gate.")
-                continue
-        else:
-            if final_score > SCORE_THRESHOLD:
-                logger.info(
-                    f"❌ Rejected (Semantic Gap): {c.get('provider_name')} score {final_score:.4f} > {SCORE_THRESHOLD}")
-                continue
-
-
+        # Filter out low-relevance results
+        if final_score > SCORE_THRESHOLD:
+            continue
 
         c["final_score"] = final_score
         scored.append(c)
 
-    # --- STEP 3: Sorting (Proximity Priority) ---
+    # --- STEP 3: Sorting & Pagination ---
     if not scored:
         return [], 0
 
-    # 🚀 FIXED: Removed negative sign from final_score to sort items ascending (best matches first)
+    # Sort based on marketplace type
     if entry_type in ["product", "quick_sale"]:
-
-        # Relevance first for products
-        scored.sort(key=lambda x: (
-            x.get("final_score", 1.0),
-            x.get("distance") if x.get("distance") is not None else 99999,
-            x.get("priority", 2)
-        ))
-
+        # Relevance first
+        scored.sort(key=lambda x: (x.get("final_score", 1.0), x.get("distance", 99999), x.get("priority", 2)))
     else:
+        # Distance first
+        scored.sort(key=lambda x: (x.get("distance", 99999), x.get("priority", 2), x.get("final_score", 1.0)))
 
-        # Distance first for services/jobs
-        scored.sort(key=lambda x: (
-            x.get("distance") if x.get("distance") is not None else 99999,
-            x.get("priority", 2),
-            x.get("final_score", 1.0)
-        ))
-
-    # Now that the ENTIRE list is ordered by distance, we slice it
-    # 🚀 THE OFFSET FIX:
+    # Pagination logic
     start = offset
     end = offset + top_k
 
@@ -1753,7 +1403,6 @@ def search_offers_firestore(query, user_lat=None, user_lng=None, top_k=5,
     logger.info(f"📊 {strategy} Pagination: Returning results {start} to {end} (Total Scored: {len(scored)})")
 
     return scored[start:end], len(scored)
-
 
 
 # -------------------------
@@ -1917,51 +1566,7 @@ def send_message(phone_number_id: str, to_number: str, content: Union[str, dict]
             raise
 
 
-# -------------------------
-# Training job (runs in-process for local dev)
-# - Builds dataset from interactions with labels and trains a simple logistic regression
-# - Saves artifact intent_clf.joblib and hot-swaps it into memory
-# -------------------------
-def build_training_dataset(min_examples_per_class=20):
-    logger.info("Building training dataset from Firestore interactions...")
-    X = []
-    y = []
-    try:
-        docs = db.collection(FIRESTORE_INTERACTIONS).stream()
-        for doc in docs:
-            data = doc.to_dict()
-            label = None
-            ua = data.get("user_action") or {}
-            # derive label heuristics
-            if ua and ua.get("label") == "search":
-                label = "search"
-            elif data.get("action") == "registered_offer" or (ua and ua.get("label") == "offer"):
-                label = "offer"
-            elif data.get("detected_intent") == "other" and data.get("intent_confidence", 0) < 0.4:
-                # weak negative examples for 'other' if available
-                label = "other"
-            if label:
-                emb = data.get("query_embedding")
-                if emb:
-                    X.append(np.array(emb, dtype=np.float32))
-                    y.append(label)
-        if not X:
-            logger.info("No labeled examples found for training")
-            return None, None
-        X = np.vstack(X)
-        y = np.array(y)
-        # ensure minimum examples per class
-        unique, counts = np.unique(y, return_counts=True)
-        counts_map = dict(zip(unique, counts))
-        logger.info("Label counts: %s", counts_map)
-        for cls, cnt in counts_map.items():
-            if cnt < min_examples_per_class:
-                logger.info("Not enough examples for class %s (%d < %d)", cls, cnt, min_examples_per_class)
-                return None, None
-        return X, y
-    except Exception:
-        logger.exception("Failed to build training dataset")
-        return None, None
+
 
 
 def guarded_send(phonenumber_id, to_number, reply_payload, message_id):
@@ -2273,7 +1878,7 @@ def get_targeted_ad(from_number, user_city="EVERYWHERE", user_category="ALL", us
 def finalize_listing_to_db(from_number, listing_doc, user_session):
     try:
         # 🛡️ THE IDENTITY FALLBACK
-        # Ensure we have a string for title so .lower() and embeddings don't fail
+        # Ensure we have a string for title
         raw_title = listing_doc.get("title")
 
         # If it's truly empty, give it a context-aware fallback
@@ -2319,52 +1924,30 @@ def finalize_listing_to_db(from_number, listing_doc, user_session):
             "indexed": True,
             "current_reach": 0,
             "target_reach": 1000,
-            "title_lowercase": clean_title.lower(),
-            # 👈 INSERT THIS LINE
             "category": mapping.get(listing_type, "service")
         })
 
-        # --- 🛡️ SAFETY NET: Add Expiry Check Here ---
+        # --- 🛡️ SAFETY NET: Add Expiry Check ---
         if "expires_at" not in listing_doc or listing_doc["expires_at"] is None:
-
             listing_type = listing_doc.get("listing_type")
 
             if listing_type == "quick_job":
                 # For Quick Jobs (14 Days)
-                listing_doc["expires_at"] = (datetime.now(timezone.utc) + timedelta(days=14)).isoformat()   # FIXED
+                listing_doc["expires_at"] = (datetime.now(timezone.utc) + timedelta(days=14)).isoformat()
             elif listing_type == "quick_sale":
                 # For Quick Sales (7 Days)
-                listing_doc["expires_at"] = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()   # FIXED
+                listing_doc["expires_at"] = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
             # Professional stays None (Eternal)
-
-        # 2. Tech Processing: Semantic Embedding
-        title = listing_doc.get("title", "")
-        desc = listing_doc.get("description", "")
-        search_text = listing_doc.get("search_text") or f"{title} {desc}".strip()
-
-        # 🚀 LAZY LOADING FIX
-        # This calls the getter. Because of the 'global' check, it only
-        # loads the model into RAM the very first time it's called
-        # (either by a search or by a new listing).
-        m = get_embedding_model()
-
-        emb = m.encode([search_text], convert_to_numpy=True).astype(np.float32)
-        listing_doc["embedding"] = emb.flatten().tolist()
 
         # 3. Final Firestore Commit
         doc_id = (listing_doc.get("listing_id") or str(uuid.uuid4())[:8]).upper()
         listing_doc["listing_id"] = doc_id
 
-        # Ensure you are using your global variable FIRESTORE_OFFERS
-        # so it matches your search function's collection name!
-        db.collection(FIRESTORE_OFFERS).document(doc_id).set(listing_doc) #  FIXED
-
+        # Commit to Firestore
+        db.collection(FIRESTORE_OFFERS).document(doc_id).set(listing_doc)
 
         # 🚀 4. TRIGGER THE SMART SAFETY CHECK
-        # We fetch the image_id from the doc to pass it to the thread
         image_id = listing_doc.get("image_id")
-
-        # Only trigger image safety check if an image actually exists (Quick Sales)
         if image_id:
             start_safety_check_thread(doc_id, image_id)
 
@@ -2384,7 +1967,7 @@ def finalize_listing_to_db(from_number, listing_doc, user_session):
             user_country=user_session.get("country")
         )
 
-        review_note = "Our safety AI is reviewing your photo." if image_id else "Our AI is indexing your business."
+        review_note = "Our safety AI is reviewing your photo." if image_id else "Your business is now live."
 
         # 💡 UPDATE: Added \n\n for better spacing between sections
         success_msg = (
@@ -2392,20 +1975,15 @@ def finalize_listing_to_db(from_number, listing_doc, user_session):
             f"🆔 *Ad ID:* `{doc_id}`\n\n"
             f"🛡️ {review_note} It usually takes a few minutes "
             f"to go live in search results.\n\n"
-            f"📈 *Quick Status:* Type *'status {doc_id}'* to see your views.\n\n"  # 👈 Double newline
+            f"📈 *Quick Status:* Type *'status {doc_id}'* to see your views.\n\n"
             f"⚙️ *Manage:* Type *'manage listings'* to see or delete all your posts. 🚀"
         )
 
-        # 🛡️ THE FIX: Combine the success message and the ad into ONE clean string
-        # This prevents the ("...", None) formatting bug.
-        return success_msg  # Section 7 owns delivery; ad is injected separately below  # 👈 Return a single string, not a tuple
-
+        return success_msg
 
     except Exception as e:
-
         logging.error(f"Error finalizing to DB: {e}")
         return "⚠️ Technical glitch. Please type 'reset' and try again."
-
 
 
 def deliver_ad(phone_number_id, from_number, ad_data, message_id):
@@ -3791,13 +3369,12 @@ def start_safety_check_thread(doc_id, image_id):
 def process_pending_verifications():
     """
     Recurring Recovery: Finds items missed or stuck and pushes them live.
-    Safety: Uses a 'checking' status to prevent duplicate processing in tight 2-min loops.
+    Safety: Uses a 'checking' status to prevent duplicate processing.
     """
-    logger.info("🛠️ 4ound Recovery: Scanning for pending safety reviews...")
+    logger.info("🛠️ Recovery: Scanning for pending safety reviews...")
 
-    # 1. Look for listings that are NOT verified AND NOT already being checked
-    # We add a filter for "pending" so we don't grab "checking" or "rejected"
-    pending_items = db.collection("listings") \
+    # Using the global constant FIRESTORE_OFFERS
+    pending_items = db.collection(FIRESTORE_OFFERS) \
         .where("is_verified", "==", False) \
         .where(filter=FieldFilter("verification_status", "==", "pending")) \
         .stream()
@@ -3806,17 +3383,15 @@ def process_pending_verifications():
     for doc in pending_items:
         found_any = True
 
-        # 🛡️ THE LOCK: Update status to 'checking' immediately
-        # This tells the next 2-minute loop: "I'm already handling this one!"
+        # 🛡️ THE LOCK: Prevents race conditions
         doc.reference.update({"verification_status": "checking"})
 
         logger.info(f"🔄 Processing Listing ID: {doc.id}")
 
-         # 🚀 THE WORKER: Handles Gemini, Vector Indexing + WhatsApp
         try:
             verify_and_publish_listing(doc.id)
         except Exception as e:
-            # If it fails, reset it to 'pending' so the next loop can try again
+            # Reset on failure
             logger.error(f"❌ Worker failed for {doc.id}: {e}")
             doc.reference.update({"verification_status": "pending"})
 
@@ -3824,82 +3399,73 @@ def process_pending_verifications():
         logger.info("✅ Recovery check complete: No pending items found.")
 
 
+
 def verify_and_publish_listing(doc_id):
     try:
-        doc_ref = db.collection("listings").document(doc_id)
+        # Use your global constant FIRESTORE_OFFERS instead of hardcoded string
+        doc_ref = db.collection(FIRESTORE_OFFERS).document(doc_id)
         doc = doc_ref.get()
-        if not doc.exists: return
+        if not doc.exists:
+            return
         data = doc.to_dict()
 
         image_id = data.get("image_id")
-        embedding = data.get("embedding")
-        user_id = data.get("user_id")  # 👈 Pull this for the notification
+        user_id = data.get("user_id")
 
-        if not image_id: return
+        if not image_id:
+            return
 
         # 1. Run Gemini Safety Check
         status = verify_image_safety(image_id)
 
         # 2. Check 24-hour window for the notification
         user_last_msg_time = data.get("created_at")
-        if isinstance(user_last_msg_time, str):
-            user_last_msg_time = datetime.fromisoformat(user_last_msg_time)
+        if hasattr(user_last_msg_time, "to_datetime"):
+            user_last_msg_time = user_last_msg_time.to_datetime()
+        elif isinstance(user_last_msg_time, str):
+            try:
+                user_last_msg_time = datetime.fromisoformat(user_last_msg_time.replace("Z", "+00:00"))
+            except:
+                user_last_msg_time = None
 
-        # Determine if we can send a free message
         can_notify = False
         if user_last_msg_time:
+            # Ensure timezone awareness for comparison
+            if user_last_msg_time.tzinfo is None:
+                user_last_msg_time = user_last_msg_time.replace(tzinfo=timezone.utc)
+
             time_elapsed = datetime.now(timezone.utc) - user_last_msg_time
             if time_elapsed < timedelta(hours=23):
                 can_notify = True
 
+        # 3. Handle Approval/Rejection
         if status is True:
             now_live = datetime.now(timezone.utc)
-            expiry_days = data.get("expiry_days", 7)
+
+            # Use the existing expiry logic or default to 7 days for products
+            expiry_date = data.get("expires_at")
+            if not expiry_date:
+                expiry_date = now_live + timedelta(days=7)
 
             update_payload = {
                 "is_verified": True,
-                "verification_status": "approved",  # 👈 CHANGE "cleared" TO "approved"
+                "verification_status": "approved",
                 "approved_at": now_live,
-                "created_at": now_live,
+                "expires_at": expiry_date,
             }
 
-            # 3. ⏳ Calculate the new Expiry
-            if expiry_days:
-                update_payload["expires_at"] = now_live + timedelta(days=expiry_days)
-
-            # ✅ Step A: Update Firestore with the fresh timestamps
+            # Update Firestore
             doc_ref.update(update_payload)
+            logger.info(f"✅ Listing {doc_id} has been approved and is now live.")
 
-            # ✅ Step B: PUSH TO LIVE MATRIX
-            if embedding:
-                try:
-                    global embeddings_matrix, id_maps
-
-                    # 1. Normalize the new vector
-                    emb_np = np.array(embedding, dtype=np.float32).reshape(1, -1)
-                    emb_norm = emb_np / np.linalg.norm(emb_np)
-
-                    # 2. Append to the matrix
-                    if embeddings_matrix is not None:
-                        embeddings_matrix = np.vstack([embeddings_matrix, emb_norm])
-                        id_maps["default"].append(doc_id)
-
-                        # 3. Save state to disk
-                        save_simple_index()
-                        logger.info(f"🚀 INSTANT LIVE: Listing {doc_id} added to Embeddings Matrix.")
-                    else:
-                        # Fallback: rebuild if matrix was lost
-                        rebuild_index_from_firestore()
-
-                except Exception as e:
-                    logger.error(f"❌ Matrix Update Error: {e}")
-
-            # ✅ Step C: Notify User (Only if within 24h window)
+            # Notify User
             if can_notify and user_id:
                 send_whatsapp_message(user_id, "✅ Your listing is now live and searchable!")
 
         elif status is False:
             doc_ref.update({"verification_status": "rejected"})
+            logger.info(f"🚫 Listing {doc_id} failed safety check.")
+
             if can_notify and user_id:
                 send_whatsapp_message(user_id, "🚫 Your image didn't pass our safety check.")
 
@@ -4147,43 +3713,32 @@ def get_user_listings(phone_number):
 
 
 def perform_actual_deletion(offer_id, owner_phone):
-    """Securely removes listing and updates NumPy matrix."""
-    global embeddings_matrix, id_maps
-
+    """Securely removes listing from Firestore."""
     try:
-        doc_ref = db.collection("listings").document(offer_id)
+        # Use the global constant for your collection
+        doc_ref = db.collection(FIRESTORE_OFFERS).document(offer_id)
         doc = doc_ref.get()
 
         if not doc.exists:
+            logger.warning(f"Deletion failed: Document {offer_id} not found.")
             return False
 
-        if doc.to_dict().get("owner_phone") != owner_phone:
+        # Ownership verification
+        data = doc.to_dict()
+        if data.get("owner_phone") != owner_phone:
+            logger.warning(f"Unauthorized deletion attempt for {offer_id} by {owner_phone}")
             return False
 
-        # 1. DELETE from Firestore
+        # DELETE from Firestore
         doc_ref.delete()
-        logger.info(f"🔥 Firestore document {offer_id} deleted.")
-
-        # 2. Update the NumPy Matrix and ID Map
-        # Find the index of the ID in our map
-        if offer_id in id_maps["default"]:
-            idx = id_maps["default"].index(offer_id)
-
-            # Remove the ID from the list
-            id_maps["default"].pop(idx)
-
-            # Remove the corresponding row from the NumPy matrix
-            embeddings_matrix = np.delete(embeddings_matrix, idx, axis=0)
-
-            # Persist the change immediately
-            save_simple_index()
-            logger.info(f"✅ Matrix updated for deleted ID: {offer_id}")
+        logger.info(f"🔥 Firestore document {offer_id} deleted successfully.")
 
         return True
 
     except Exception as e:
-        logger.error(f"❌ Deletion failure: {e}")
+        logger.error(f"❌ Deletion failure for {offer_id}: {e}")
         return False
+
 
 
 def nightly_cleanup():
@@ -4198,44 +3753,34 @@ def nightly_cleanup():
 
     count = 0
     for doc in expired_docs:
-        # Assuming perform_actual_deletion_silent uses the same logic
-        # we just updated in perform_actual_deletion
+        # Calls the silent deletion function we cleaned earlier
         if perform_actual_deletion_silent(doc.id, doc.to_dict().get("owner_phone")):
             count += 1
             logger.info(f"🗑️ Purged expired: {doc.id}")
 
     if count > 0:
-        logger.info(f"✨ Purge complete. {count} expired listings removed and matrix updated.")
+        logger.info(f"✨ Purge complete. {count} expired listings removed.")
     else:
         logger.info("✅ Cleanup check complete: No expired listings to remove.")
 
 
+
 def perform_actual_deletion_silent(offer_id, owner_phone):
     """Internal version of deletion that unifies collection references."""
-    global id_maps, embeddings_matrix
     try:
         # 1. DELETE from Firestore
         doc_ref = db.collection(FIRESTORE_OFFERS).document(offer_id)
         doc_ref.delete()
         logger.info(f"🗑️ Background Eviction: Removed doc {offer_id} from {FIRESTORE_OFFERS}")
 
-        # 2. Update the NumPy Matrix and ID Map directly
-        # No lock required — assignment is atomic in Python
-        if offer_id in id_maps.get("default", []):
-            idx = id_maps["default"].index(offer_id)
-
-            # Remove from the ID map and the NumPy matrix
-            id_maps["default"].pop(idx)
-            embeddings_matrix = np.delete(embeddings_matrix, idx, axis=0)
-
-            # Persist the change to disk
-            save_simple_index()
-            logger.info(f"✅ Matrix updated for deleted ID: {offer_id}")
+        # The matrix update logic has been removed as it is no longer
+        # required for the fuzzy search architecture.
 
         return True
     except Exception as e:
         logger.error(f"❌ Silent delete failed for {offer_id}: {e}")
         return False
+
 
 
 def get_market_insight(user_city="GLOBAL"):
@@ -7141,13 +6686,6 @@ def handle_whatsapp_logic(data):
                                             user_country=session.get("country")
                                         )
 
-                                        def sync_rebuild():
-                                            time.sleep(3)  # 🟢 The "Firestore Breath" delay
-                                            logger.info("🔄 Triggered rebuild starting...")
-                                            rebuild_index_from_firestore()
-
-                                        threading.Thread(target=sync_rebuild, daemon=True).start()
-
                                         # 5. --- SUCCESS UI/UX DISPLAY ---
                                         expiry_days = listing_doc.get("expiry_days", 7)
                                         success_raw = get_local_response(prompt_namespace, None, language=detected_lang,
@@ -7914,14 +7452,19 @@ def webhook():
     return "OK", 200
 
 # Add this route to main.py
-@app.route('/cron/rebuild', methods=['GET'])
-def trigger_rebuild():
-    # This runs the heavy tasks only when UptimeRobot pings this URL
-    logger.info("⏰ UptimeRobot ping received: Starting background sync...")
-    rebuild_index_from_firestore()
+@app.route('/cron/maintenance', methods=['GET'])
+def trigger_maintenance():
+    # Only run the remaining housekeeping tasks
+    logger.info("⏰ UptimeRobot ping received: Starting maintenance tasks...")
+
+    # process_pending_verifications handles stuck items
     process_pending_verifications()
+
+    # nightly_cleanup handles expired documents
     nightly_cleanup()
-    return "Sync complete", 200
+
+    return "Maintenance complete", 200
+
 
 @app.route('/')
 def index():
