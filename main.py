@@ -2834,7 +2834,7 @@ def perform_smart_search(smart_data, lat, lng):
             raw_results = db_response or []
             total_count = len(raw_results)
 
-        verified_results = [res for res in raw_results if res.get('score', 0) >= 0.60]
+        verified_results = raw_results
 
         # ✅ STRIKE 2: The Disciplined Rescue Search
 
@@ -2862,7 +2862,7 @@ def perform_smart_search(smart_data, lat, lng):
                 raw_broad_results = broad_response or []
                 total_count = len(raw_broad_results)
 
-            verified_results = [res for res in raw_results if res.get('score', 0) >= 0.60]
+            verified_results = raw_broad_results
 
         # Set market-specific meta
 
