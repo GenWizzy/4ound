@@ -4852,6 +4852,9 @@ def handle_whatsapp_logic(data):
                                     help_text = (
                                         "🤖 *Welcome to 4ound AI*\n"
                                         "━━━━━━━━━━━━━━\n\n"
+                                        
+                                        "💬 *Need Human Support/Something Else?*\n"
+                                        "Telegram: https://t.me/Human4ound\n\n"
 
                                         "4ound helps you find nearby:\n"
                                         "🛠️ Services\n"
@@ -5117,6 +5120,9 @@ def handle_whatsapp_logic(data):
                                 help_text = (
                                     "🤖 *Welcome to 4ound AI*\n"
                                     "━━━━━━━━━━━━━━\n\n"
+                                    
+                                    "💬 *Need Human Support?*\n"
+                                    "Telegram: https://t.me/Human4ound\n\n"
 
                                     "4ound helps you find nearby:\n"
                                     "🛠️ Services\n"
