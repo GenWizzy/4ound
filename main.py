@@ -51,6 +51,12 @@ from apscheduler.schedulers.background import BackgroundScheduler
 model = None
 EMBED_DIM = None
 
+# At the top of main.py, near your other imports and global variables
+from sentence_transformers import SentenceTransformer
+
+# Initialize the model at start-up.
+# It will consume memory once, but it won't crash on search requests.
+model = SentenceTransformer("sentence-transformers/all-MiniLM-L3-v2") # Using L3 is even lighter than L6
 # Zero-shot classifier for greeting/intent detection
 #zero_shot_pipeline = pipeline(
 #    "zero-shot-classification",
@@ -1232,11 +1238,6 @@ def get_db():
 
 def get_embedding_model():
     global model
-    if model is None:
-        logger.info("💡 Lazy loading lightweight AI model...")
-        from sentence_transformers import SentenceTransformer
-        # Use a much lighter model to fit in 512MB
-        model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
     return model
 
 
