@@ -56,7 +56,7 @@ from sentence_transformers import SentenceTransformer
 
 # Initialize the model at start-up.
 # It will consume memory once, but it won't crash on search requests.
-model = SentenceTransformer("sentence-transformers/all-MiniLM-L3-v2") # Using L3 is even lighter than L6
+model = SentenceTransformer("sentence-transformers/paraphrase-MiniLM-L3-v2")
 # Zero-shot classifier for greeting/intent detection
 #zero_shot_pipeline = pipeline(
 #    "zero-shot-classification",
