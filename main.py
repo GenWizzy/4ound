@@ -492,6 +492,7 @@ def rule_quick_sell(text):
 def merge_candidates(rule_candidates, ml_candidate=None, session_prior=0.6):
     scores = {}
     reasons = {}
+
     for intent, score, meta in rule_candidates:
         scores[intent] = max(scores.get(intent, 0.0), score)
         reasons.setdefault(intent, []).append(("rule", score, meta))
@@ -499,23 +500,29 @@ def merge_candidates(rule_candidates, ml_candidate=None, session_prior=0.6):
     if ml_candidate:
         intent_ml, conf_ml = ml_candidate
 
-        # 🛡️ Safeguard: Extract raw scalar string if intent_ml is a NumPy array or list
         if hasattr(intent_ml, "item"):
             intent_ml = intent_ml.item()
         elif isinstance(intent_ml, (list, tuple)) and len(intent_ml) > 0:
-            intent_ml = intent_ml
+            intent_ml = intent_ml[0]
 
-        # Force a clean python string representation
         intent_ml = str(intent_ml)
 
         scores[intent_ml] = max(scores.get(intent_ml, 0.0), conf_ml)
         reasons.setdefault(intent_ml, []).append(("ml", conf_ml, {}))
 
-    # Apply supply prior as soft bias to provider_onboarding
     if "provider_onboarding" in scores:
-        scores["provider_onboarding"] = blend_confidence(scores["provider_onboarding"], session_prior)
+        scores["provider_onboarding"] = blend_confidence(
+            scores["provider_onboarding"],
+            session_prior
+        )
+
+    # 🛡️ SAFETY NET
+    if not scores:
+        logger.warning("No intent candidates generated")
+        return "search", 0.5, []
 
     best_intent, best_score = max(scores.items(), key=lambda x: x[1])
+
     return best_intent, best_score, reasons.get(best_intent, [])
 
 
@@ -709,41 +716,57 @@ def predict_intent_prototype(text: str, cached_intent=None, cached_lang=None):
             return "greeting", 0.9, lang
 
     # --- STEP 3.5: ⚡ QUICK SELL DETECTION ---
-    # Handles "I want to sell my shoe", "wan sell phone", etc.
     rule_candidates = []
 
-    # 🛒 Call the helper: ensure this returns a score like 0.97 for strong matches
+    # 🛒 Quick Sell
     rule_candidates += rule_quick_sell(lower_text)
 
-    # 🔍 Keep this for Section 6/8 logic
+    # 🔍 Search Detection
     is_search_pattern = re.search(
         r"\b(looking for|need|find|want|buy|get|search|who can|where is|where can i|get me|show me|nearby|around me|close by|closeby)\b",
         lower_text
     )
 
+    # ✅ ADD THIS BLOCK
+    search_keywords = ["find", "need", "looking", "search", "buy", "get"]
+
+    if (
+            is_search_pattern
+            or any(w in lower_text for w in search_keywords)
+    ):
+        rule_candidates.append(
+            ("search", 0.90, {"search_hint": True})
+        )
+
     # --- PROVIDER / IMPLICIT CANDIDATE ---
-    # 🆕 Added 'sell' to is_active_provider triggers for better Section 7 routing
     is_active_provider = any(
-        p in lower_text for p in ["i am", "i'm", "my service", "register", "onboard", "sell"]) or has_role(lower_text)
+        p in lower_text for p in ["i am", "i'm", "my service", "register", "onboard", "sell"]
+    ) or has_role(lower_text)
 
     implicit_provider = has_role(lower_text) and any(
-        w in lower_text for w in ["work", "jobs", "customers", "client", "business"])
+        w in lower_text for w in ["work", "jobs", "customers", "client", "business"]
+    )
 
     provider_score = 0.96 if (is_active_provider or implicit_provider) else 0.0
 
-    # Merge as candidate
     if provider_score > 0:
-        rule_candidates.append(("provider_onboarding", provider_score, {"provider_hint": True}))
+        rule_candidates.append(
+            ("provider_onboarding", provider_score, {"provider_hint": True})
+        )
 
     # --- SHORT INPUT FILTER ---
     words = lower_text.split()
-    # short phrases from known roles (e.g., "mechanic") -> search
-    if has_role(lower_text) and len(words) <= 2 and not any(p in lower_text for p in ["i am", "i'm", "my"]):
-        rule_candidates.append(("search", 0.85 * session.get("supply_prior", 1.0), {}))
 
+    if has_role(lower_text) and len(words) <= 2 and not any(
+            p in lower_text for p in ["i am", "i'm", "my"]
+    ):
+        rule_candidates.append(
+            ("search", 0.85 * session.get("supply_prior", 1.0), {})
+        )
+
+    logger.info(f"DEBUG CANDIDATES: {rule_candidates}")
 
     # --- MERGE RULE + ML CANDIDATES ---
-    # Now ml_candidate is defined and ready for the merge!
     chosen_intent, confidence, reasons = merge_candidates(
         rule_candidates,
         None,
