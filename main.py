@@ -2059,14 +2059,19 @@ def send_location_request(recipient_number: str, body_text: str) -> dict:
         "Content-Type": "application/json"
     }
 
-    # ✅ Plain text payload — works on all accounts without verification
+    # ✅ Interactive Payload — Triggers the native location picker
     payload = {
         "messaging_product": "whatsapp",
-        "recipient_type": "individual",
         "to": clean_number,
-        "type": "text",
-        "text": {
-            "body": body_text
+        "type": "interactive",
+        "interactive": {
+            "type": "location_request_message",
+            "body": {
+                "text": body_text
+            },
+            "action": {
+                "name": "send_location"
+            }
         }
     }
 
@@ -2898,7 +2903,7 @@ def perform_smart_search(smart_data, lat, lng):
     fsq_results = []
 
     # 🛑 GUARDRAIL: Skip if we have enough results or are in Employment mode
-    if mode != "EMPLOYMENT_SEARCH" and len(verified_results) < MAX_RESULTS:
+    if mode != "EMPLOYMENT_SEARCH" and not verified_results:
 
         # 🆕 THE SOFTENER: Clean query
         fsq_query = search_query.lower().strip()
@@ -4228,11 +4233,17 @@ def edit_message(phone_number_id, to_number, message_id, new_text):
 
 
 def extract_keyword(text):
-    if not text: return ""
-    # Add common Nigerian/market-specific filler words to this list if needed
-    forbidden = ["where", "can", "i", "get", "find", "search", "for", "please", "?"]
-    words = [w for w in text.lower().replace("?", "").split() if w not in forbidden]
-    return " ".join(words).strip()
+    if not text:
+        return ""
+
+    text = re.sub(
+        r"^(i am looking for|i am looking|looking for|find me|i need|need|i want|want)\s+",
+        "",
+        text,
+        flags=re.IGNORECASE
+    )
+
+    return text.strip().lower()
 
 def log_search_to_db(from_number, query, city="GLOBAL"):
     """
