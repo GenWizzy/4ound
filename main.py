@@ -143,28 +143,9 @@ ID_MAP_PATH = "id_map.json"            # The list of IDs
 
 embeddings_matrix = None
 id_maps: Dict[str, List[str]] = {"default": []}
-def initialize_embeddings():
-    global embeddings_matrix, id_maps
 
-    try:
-        embeddings_matrix = np.load(EMBEDDINGS_DATA_PATH)
 
-        with open(ID_MAP_PATH, "r", encoding="utf-8") as f:
-            id_maps = json.load(f)
 
-        logger.info(f"✅ Loaded {len(id_maps['default'])} embeddings")
-
-    except Exception as e:
-        logger.warning(f"⚠️ Embedding files missing or invalid: {e}")
-
-        try:
-            logger.info("🔄 Rebuilding from Firestore...")
-            rebuild_index_from_firestore()
-        except Exception:
-            logger.exception("❌ Failed to rebuild embeddings from Firestore")
-
-# IMPORTANT: Call it once at the module level
-initialize_embeddings()
 # -------------------------
 # Flask app setup
 # -------------------------
@@ -1363,6 +1344,29 @@ def rebuild_index_from_firestore():
     except Exception:
         logger.exception("❌ CRITICAL: Unhandled error in rebuild")
 
+
+
+def initialize_embeddings():
+    global embeddings_matrix, id_maps
+
+    try:
+        embeddings_matrix = np.load(EMBEDDINGS_DATA_PATH)
+
+        with open(ID_MAP_PATH, "r", encoding="utf-8") as f:
+            id_maps = json.load(f)
+
+        logger.info(f"✅ Loaded {len(id_maps['default'])} embeddings")
+
+    except Exception as e:
+        logger.warning(f"⚠️ Embedding files missing or invalid: {e}")
+
+        try:
+            logger.info("🔄 Rebuilding from Firestore...")
+            rebuild_index_from_firestore()
+        except Exception:
+            logger.exception("❌ Failed to rebuild embeddings from Firestore")
+# IMPORTANT: Call it once at the module level
+initialize_embeddings()
 
 def save_offer_to_firestore(provider_name, description, contact_whatsapp, lat, lng, biz_name=None,
                             entry_type="service"):
@@ -7919,6 +7923,9 @@ def trigger_rebuild():
     nightly_cleanup()
     return "Sync complete", 200
 
+@app.route('/')
+def index():
+    return "Service is live and operational.", 200
 
 
 
