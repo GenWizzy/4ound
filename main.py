@@ -145,14 +145,23 @@ embeddings_matrix = None
 id_maps: Dict[str, List[str]] = {"default": []}
 def initialize_embeddings():
     global embeddings_matrix, id_maps
+
     try:
-        # Load your saved .npy and .json files
-        embeddings_matrix = np.load("embeddings.npy")
-        with open("id_map.json", "r") as f:
+        embeddings_matrix = np.load(EMBEDDINGS_DATA_PATH)
+
+        with open(ID_MAP_PATH, "r", encoding="utf-8") as f:
             id_maps = json.load(f)
-        logger.info(f"✅ Embeddings matrix loaded: {len(embeddings_matrix)} vectors.")
+
+        logger.info(f"✅ Loaded {len(id_maps['default'])} embeddings")
+
     except Exception as e:
-        logger.error(f"❌ Failed to load embeddings: {e}")
+        logger.warning(f"⚠️ Embedding files missing or invalid: {e}")
+
+        try:
+            logger.info("🔄 Rebuilding from Firestore...")
+            rebuild_index_from_firestore()
+        except Exception:
+            logger.exception("❌ Failed to rebuild embeddings from Firestore")
 
 # IMPORTANT: Call it once at the module level
 initialize_embeddings()
@@ -1273,7 +1282,7 @@ def save_simple_index():
 
         # 2. Save the ID mapping
         with open(ID_MAP_PATH, "w", encoding="utf-8") as f:
-            json.dump(id_maps["default"], f, indent=4)
+            json.dump(id_maps, f, indent=4)
 
         logger.info(f"💾 Embeddings matrix and ID Map ({len(id_maps['default'])} items) saved to disk.")
 
