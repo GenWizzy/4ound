@@ -2835,6 +2835,9 @@ def perform_smart_search(smart_data, lat, lng):
             total_count = len(raw_results)
 
         verified_results = raw_results
+        logger.info(
+            f"✅ Strict search returned {len(verified_results)} verified results"
+        )
 
         # ✅ STRIKE 2: The Disciplined Rescue Search
 
@@ -2863,6 +2866,9 @@ def perform_smart_search(smart_data, lat, lng):
                 total_count = len(raw_broad_results)
 
             verified_results = raw_broad_results
+            logger.info(
+                f"✅ Broad search returned {len(verified_results)} verified results"
+            )
 
         # Set market-specific meta
 
