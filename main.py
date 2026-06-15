@@ -1394,10 +1394,10 @@ def search_offers_firestore(query, user_lat=None, user_lng=None, top_k=5,
                             offset=0,
                             category_id=None, entry_type="service",
                             search_key="default", required_types=None):
-
+    # 1. Global declaration at the very top
     global embeddings_matrix, id_maps
 
-    # 🛡️ DEFENSIVE GUARD
+    # 2. Defensive Guard
     if embeddings_matrix is None or len(embeddings_matrix) == 0:
         logger.error("❌ CRITICAL: No embeddings matrix loaded.")
         return [], 0
@@ -1405,11 +1405,8 @@ def search_offers_firestore(query, user_lat=None, user_lng=None, top_k=5,
     id_map = id_maps.get("default", [])
     logger.info(f"🧠 Embeddings Status: {len(embeddings_matrix)} vectors present.")
 
-    # --- STEP 1: NumPy Semantic Retrieval (REPLACES FAISS) ---
-    global embeddings_matrix, id_maps
-    if embeddings_matrix is None:
-        logger.warning("⚠️ Search skipped: Embeddings matrix not loaded.")
-        return [], 0
+    # --- STEP 1: NumPy Semantic Retrieval ---
+    # (No second global or second check needed here)
 
     # 1. Encode query and normalize
     q_emb = get_embedding_model().encode([query], convert_to_numpy=True).astype(np.float32)
@@ -1450,65 +1447,49 @@ def search_offers_firestore(query, user_lat=None, user_lng=None, top_k=5,
                 continue
 
             data = doc.to_dict()
-
-            # ✅ Unified type resolution
             doc_type = data.get("entry_type") or data.get("listing_type", "service")
 
-            # --- 🆕 ADD THIS: Rescue Filter Logic ---
-            # If a Broad Search is running, this stops 'jobs' from appearing in 'product' results.
             if required_types and doc_type not in required_types:
                 logger.info(f"❌ Rejected (Rescue Filter): {doc_type} not in {required_types}")
                 continue
 
             doc_category = data.get("category")
-            d_id = doc.id
+            firestore_doc_id = doc.id  # Renamed from d_id
 
-            # ✅ 🔍 DEBUG: Log BEFORE filters
             logger.info(
                 f"🧪 Candidate: {data.get('title')} | "
-                f"Score: {score_map.get(d_id)} | "
+                f"Score: {score_map.get(firestore_doc_id)} | "
                 f"Category: {doc_category} | "
                 f"Type: {doc_type}"
             )
 
             # --- 1. NON-NEGOTIABLE BUSINESS RULES ---
-            # Expiry Check
-            expiry = data.get("expires_at") or data.get("expiry_date")  # 🧲 Catch both potential naming variants safely
+            expiry = data.get("expires_at") or data.get("expiry_date")
             if expiry:
                 try:
-                    # 🌍 Datatype Unification: Convert everything to a timezone-aware Python datetime object
                     if isinstance(expiry, str):
-                        # Handle text ISO strings cleanly
                         expiry_dt = datetime.fromisoformat(expiry.replace("Z", "+00:00"))
                     elif hasattr(expiry, "to_datetime"):
-                        # Handle native Google Firestore Timestamp objects seamlessly
                         expiry_dt = expiry.to_datetime().replace(tzinfo=timezone.utc)
                     else:
                         expiry_dt = expiry
 
-                    # ⏰ Now both sides match, making the timeline comparison 100% accurate!
                     if expiry_dt < now:
-                        logger.info(f"❌ Rejected (Expired): {d_id}. Triggering immediate auto-delete.")
-
-                        # 🚀 Run deletion in a background thread so the user doesn't wait
+                        logger.info(f"❌ Rejected (Expired): {firestore_doc_id}. Triggering immediate auto-delete.")
                         threading.Thread(
                             target=perform_actual_deletion_silent,
-                            args=(d_id, data.get("owner_phone"))
+                            args=(firestore_doc_id, data.get("owner_phone"))
                         ).start()
                         continue
-
                 except Exception as date_err:
-                    logger.error(f"⚠️ Expiry date parsing failed for doc {d_id}: {str(date_err)}")
-                    # Defensive Fallback: If a date string gets corrupted, don't let it crash your user searches
+                    logger.error(f"⚠️ Expiry date parsing failed for doc {firestore_doc_id}: {str(date_err)}")
 
-            # Verification Check (Only enforce for quick_sale types)
             is_verified = data.get("is_verified", False)
             if doc_type == "quick_sale" and not is_verified:
-                logger.info(f"❌ Rejected (Not verified): {d_id}")
+                logger.info(f"❌ Rejected (Not verified): {firestore_doc_id}")
                 continue
 
             # --- 2. DYNAMIC TYPE & CATEGORY FILTERING ---
-
             valid_type_map = {
                 "service": ["service", "professional", "provider", "expert"],
                 "product": ["product", "quick_sale", "vendor", "retail"],
@@ -1516,18 +1497,12 @@ def search_offers_firestore(query, user_lat=None, user_lng=None, top_k=5,
                 "quick_job": ["quick_job", "job"],
                 "quick_sale": ["quick_sale", "product"]
             }
-
-            # 💡 Smart Fallback:
-            # If the entry_type is 'product', it will now allow both 'product' AND 'quick_sale'
             allowed_types = valid_type_map.get(entry_type, [entry_type])
 
-            # A. Enforce Strict Type Boundary
             if doc_type not in allowed_types:
                 logger.info(f"❌ Rejected (Type mismatch): {doc_type} not in {allowed_types}")
                 continue
 
-            # B. Flexible Category Matching
-            # Allows "service" searches to pick up "professional" or "job" categories
             is_category_match = True
             if category_id:
                 if category_id == "service" and doc_category in ["service", "professional", "job", "provider"]:
@@ -1541,19 +1516,16 @@ def search_offers_firestore(query, user_lat=None, user_lng=None, top_k=5,
 
             # ✅ PASSED ALL FILTERS
             logger.info(
-                f"✅ Accepted: {data.get('title')} | "
-                f"Score={score_map.get(d_id)} | "
-                f"Category={doc_category} | "
-                f"Type={doc_type}"
-            )
+                f"✅ Accepted: {data.get('title')} | Score={score_map.get(firestore_doc_id)} | Category={doc_category} | Type={doc_type}")
 
             candidates.append({
-                "base_score": score_map.get(d_id, 0.0),
+                "base_score": score_map.get(firestore_doc_id, 0.0),
                 "priority": 1 if data.get("is_verified") else 2,
-                "id": d_id,
+                "id": firestore_doc_id,
                 "category": doc_category,
-                "visibility": data.get("visibility"),  # 👈 MUST ADD THIS
-                "provider_name": data.get("job_title") or data.get("biz_name") or data.get("title") or data.get("provider_name") or "Local Business",
+                "visibility": data.get("visibility"),
+                "provider_name": data.get("job_title") or data.get("biz_name") or data.get("title") or data.get(
+                    "provider_name") or "Local Business",
                 "compensation": data.get("compensation"),
                 "lat": data.get("location", {}).get("lat") or data.get("lat"),
                 "lng": data.get("location", {}).get("lng") or data.get("lng"),
