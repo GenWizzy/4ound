@@ -1342,11 +1342,13 @@ def search_offers_firestore(query, user_lat=None, user_lng=None, top_k=5,
         # Soft relevance boost
         if keyword_overlap:
             boost = 0.45 if entry_type == "quick_job" else 0.15
-            final_score -= boost
+            final_score += boost  # ✅ RapidFuzz: higher is better
+            final_score = min(final_score, 1.0)  # Cap at 1.0
 
         # 2. Category Boosting
         if category_id and str(c.get("category")) == str(category_id):
-            final_score -= 0.40
+            final_score += 0.10  # ✅ Small boost for category match
+            final_score = min(final_score, 1.0)
 
         # 3. Geospatial Scoring
         if user_lat and user_lng and c.get("lat") and c.get("lng"):
@@ -1355,24 +1357,22 @@ def search_offers_firestore(query, user_lat=None, user_lng=None, top_k=5,
                 c["distance"] = round(dist, 1)
 
                 if dist <= 1.5:
-                    final_score -= 0.70
+                    final_score += 0.30  # Very close — big boost
                 elif dist <= 5.0:
-                    final_score -= 0.40
+                    final_score += 0.20
                 elif dist <= 15.0:
-                    final_score -= 0.20
+                    final_score += 0.10
                 elif dist <= 50.0 and c.get("visibility") != "Remote Service":
-                    final_score += 0.15
+                    final_score -= 0.05  # Mild penalty
                 elif dist > 100.0 and c.get("visibility") != "Remote Service":
-                    final_score += 0.60
+                    final_score -= 0.30  # Far away — penalty
+                final_score = max(0.0, min(final_score, 1.0))  # Keep in 0-1 range
             except:
                 c["distance"] = 99999
         else:
             c["distance"] = 99999
 
         # Filter out low-relevance results
-        if final_score > SCORE_THRESHOLD:
-            continue
-
         c["final_score"] = final_score
         scored.append(c)
 
@@ -1383,10 +1383,10 @@ def search_offers_firestore(query, user_lat=None, user_lng=None, top_k=5,
     # Sort based on marketplace type
     if entry_type in ["product", "quick_sale"]:
         # Relevance first
-        scored.sort(key=lambda x: (x.get("final_score", 1.0), x.get("distance", 99999), x.get("priority", 2)))
+        scored.sort(key=lambda x: (-x.get("final_score", 0.0), x.get("distance", 99999), x.get("priority", 2)))
     else:
         # Distance first
-        scored.sort(key=lambda x: (x.get("distance", 99999), x.get("priority", 2), x.get("final_score", 1.0)))
+        scored.sort(key=lambda x: (x.get("distance", 99999), x.get("priority", 2), -x.get("final_score", 0.0)))
 
     # Pagination logic
     start = offset
