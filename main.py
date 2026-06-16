@@ -1294,7 +1294,10 @@ def search_offers_firestore(query, user_lat=None, user_lng=None, top_k=5,
         d = doc.to_dict()
         d['id'] = doc.id
         all_docs.append(d)
-        names_to_search.append(d.get('title') or d.get('biz_name') or d.get('provider_name') or "")
+        title = d.get('title') or d.get('biz_name') or d.get('provider_name') or ""
+        desc = d.get('description') or d.get('search_text') or ""
+        combined = f"{title} {desc}".strip()
+        names_to_search.append(combined)
 
     fuzzy_matches = process.extract(query, names_to_search, scorer=fuzz.WRatio, limit=50)
 
@@ -1390,30 +1393,44 @@ def search_offers_firestore(query, user_lat=None, user_lng=None, top_k=5,
             final_score = min(final_score, 1.0)
 
         # 3. Geospatial Scoring
+        is_valid_candidate = True  # Track matching state cleanly
+
         if user_lat and user_lng and c.get("lat") and c.get("lng"):
             try:
                 dist = calculate_distance(float(user_lat), float(user_lng), float(c["lat"]), float(c["lng"]))
                 c["distance"] = round(dist, 1)
 
-                if dist <= 1.5:
-                    final_score += 0.30  # Very close — big boost
-                elif dist <= 5.0:
-                    final_score += 0.20
-                elif dist <= 15.0:
-                    final_score += 0.10
-                elif dist <= 50.0 and c.get("visibility") != "Remote Service":
-                    final_score -= 0.05  # Mild penalty
-                elif dist > 100.0 and c.get("visibility") != "Remote Service":
-                    final_score -= 0.30  # Far away — penalty
-                final_score = max(0.0, min(final_score, 1.0))  # Keep in 0-1 range
-            except:
+                # 🛑 SCRAP GUARDRAIL: Drop physical providers further than 50km away
+                if dist > 50.0 and c.get("visibility") != "Remote Service":
+                    logger.info(f"📍 Scrapped (Too far away): {c.get('provider_name')} | Distance: {dist}km")
+                    is_valid_candidate = False
+
+                if is_valid_candidate:
+                    # 🎯 Proximity Boosts for valid candidates
+                    if dist <= 1.5:
+                        final_score += 0.30
+                    elif dist <= 5.0:
+                        final_score += 0.20
+                    elif dist <= 15.0:
+                        final_score += 0.10
+                    elif dist <= 50.0:
+                        final_score -= 0.05
+
+                    final_score = max(0.0, min(final_score, 1.0))
+            except Exception as e:
+                logger.error(f"❌ Error calculating distance: {e}")
                 c["distance"] = 99999
         else:
+            # 🛑 SERVICE SAFETY NET: Scrap service options that lack raw location properties
+            if entry_type not in ["product", "quick_sale"]:
+                logger.info(f"📍 Scrapped (No geo-data for service): {c.get('provider_name')}")
+                is_valid_candidate = False
             c["distance"] = 99999
 
-        # Filter out low-relevance results
-        c["final_score"] = final_score
-        scored.append(c)
+        # Only append to collection if the listing passed our geographic criteria
+        if is_valid_candidate:
+            c["final_score"] = final_score
+            scored.append(c)
 
     # --- STEP 3: Sorting & Pagination ---
     if not scored:
