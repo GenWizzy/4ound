@@ -2730,7 +2730,13 @@ def clean_for_display(text):
 
     text = text.lower().strip()
 
+    # Phrases that start a sentence
     prefixes = [
+        "i am an",
+        "i am a",
+        "i'm an",
+        "i'm a",
+        "i am",
         "i need",
         "i want",
         "i am looking for",
@@ -2744,24 +2750,34 @@ def clean_for_display(text):
         "looking for"
     ]
 
-    pattern = r"^(" + "|".join(prefixes) + r")\s+"
+    # Handle anchor matching efficiently by putting longer phrases first
+    prefixes.sort(key=len, reverse=True)
+    pattern = r"^(" + "|".join(re.escape(p) for p in prefixes) + r")\s+"
     text = re.sub(pattern, "", text, flags=re.IGNORECASE)
 
-    # Remove shopping/search fluff
+    # Contextual fluff words to strip out anywhere in the text
     fluff = [
         r"\bto buy\b",
         r"\bfor sale\b",
         r"\bnear me\b",
         r"\baround here\b",
-        r"\bplease\b"
+        r"\bplease\b",
+        r"\blooking for a job\b",
+        r"\blooking for job\b",
+        r"\bfor a job\b",
+        r"\bfor job\b",
+        r"\bjob\b",
+        r"\bvacancy\b"
     ]
 
     for f in fluff:
         text = re.sub(f, "", text, flags=re.IGNORECASE)
 
+    # Clean up any duplicate spacing or trailing words
     text = re.sub(r"\s+", " ", text).strip()
 
     return text
+
 
 
 def perform_smart_search(smart_data, lat, lng):
