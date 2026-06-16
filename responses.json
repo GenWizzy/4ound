@@ -114,17 +114,15 @@
     },
     "general": {
       "greeting": [
-        "Hello! I'm the 4ound Brain. How can I help you today?\n\n(Btw, if you ever get stuck, just type 'reset' to start over! 😊)",
-        "Welcome to 4ound! What can I help you find today?\n\n💡 Pro-tip: Type 'reset' anytime if you want to start a fresh search.",
-        "4ound is here! 🔍 What are you looking for or listing today?\n\n(If you make a mistake, no problem type 'reset' and we go again! ✌️)",
-        "Welcome back! I'm ready to bridge the gap between you and your needs. 🚀\n\n🔄 Just so you know, typing 'reset' clears your current flow instantly.",
-        "The 4ound map is open! 🗺️ How can I help you find (or be found) today?\n\n(Need to clear the map? Just type 'reset' to head back to home base! 📍)"
+        "Hello! I'm the 4ound Brain. 🚀\n\n💡 *4ound currently works best in English.*\n\nTry typing things like:\n👉 _I need a plumber_\n👉 _I want to buy books_\n👉 _I want to sell my phone_\n\n(Btw, if you ever get stuck, just type 'reset' to start over! 😊)",
+        "Welcome to 4ound! 🔍\n\n💡 *4ound currently works best in English.*\n\nTry:\n👉 _Looking for a mechanic_\n👉 _I want to sell my shoe_\n👉 _I need a tailor_\n\nPro-tip: Type 'reset' anytime to start a fresh search.",
+        "4ound is here! 🗺️ What are you looking for or listing today?\n\n💡 *4ound currently works best in English.*\n\nExamples:\n• _I need a doctor_\n• _I sell bags_\n• _Where can I find a pharmacy?_\n\n(If you make a mistake, just type 'reset' and we go again! ✌️)"
       ],
       "fallback": [
-        "I'm not quite sure how to handle that yet. 🧐\n\nTry phrases like:\n👉 'I need to buy a mattress'\n👉 'I am a fashion designer'",
-        "Hmm, I didn't get that. I'm still learning! 🧠\n\nYou can try:\n👉 'Where is the nearest pharmacy?'\n👉 'I run a laundry business'",
-        "I'm not quite sure how to handle that yet. 🧐\n\nTry phrases like:\n👉 'I want to sell my phone'\n👉 'I need a plumber near me'",
-        "Hmm, I didn't get that. I'm still learning! 🧠\n\nYou can try:\n👉 'I want to list my shoe for sale'\n👉 'Where is the nearest pharmacy?'"
+        "I'm not quite sure how to handle that yet. 🧐\n\n💡 *4ound currently works best in English.*\n\nTry phrases like:\n👉 'I need to buy a mattress'\n👉 'I am a fashion designer'\n👉 'I want to sell my phone'",
+        "Hmm, I didn't get that. I'm still learning! 🧠\n\n💡 *4ound currently works best in English.*\n\nTry:\n👉 'Where is the nearest pharmacy?'\n👉 'I run a laundry business'\n👉 'Looking for a plumber'",
+        "I'm not quite sure how to handle that yet. 🧐\n\n💡 *4ound currently works best in English.*\n\nTry phrases like:\n👉 'I want to sell my phone'\n👉 'I need a plumber near me'\n👉 'I need a tailor'",
+        "Hmm, I didn't get that. I'm still learning! 🧠\n\n💡 *4ound currently works best in English.*\n\nTry:\n👉 'I want to list my shoe for sale'\n👉 'Where is the nearest pharmacy?'\n👉 'I need an electrician'"
       ]
     }
   },

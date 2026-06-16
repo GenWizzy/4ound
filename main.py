@@ -579,15 +579,20 @@ def predict_intent_prototype(text: str, cached_intent=None, cached_lang=None):
     if cached_intent:
         return cached_intent, 1.0, detected_lang
 
-    # --- STEP 2: 🇳🇬 FULL MULTILINGUAL DETECTION ---
-    if any(w in lower_text for w in ["how far", "wetin", "wan sell", "de find"]):
-        detected_lang = "Pidgin"
-    elif any(w in lower_text for w in ["n wa", "n lẹ", "ṣọọbu", "oníbàárà", "e nle"]):
-        detected_lang = "Yoruba"
-    elif any(w in lower_text for w in ["ina neman", "sanya", "shagon", "barka", "sannu"]):
-        detected_lang = "Hausa"
-    elif any(w in lower_text for w in ["achọrọ m", "ebe ị nọ", "nke ikpeazụ", "biko", "nnọọ"]):
-        detected_lang = "Igbo"
+    # --- STEP 2: GREETINGS FILTER ---
+    english_greetings = [
+        "hello", "hi", "hey", "sup", "yo",
+        "good morning", "good afternoon", "good evening",
+        "morning", "afternoon", "evening"
+    ]
+    if lower_text in english_greetings or any(lower_text.startswith(g + " ") for g in english_greetings):
+        logger.info("👋 Greeting Detected")
+        return "greeting", 0.95, "English"
+
+    # --- SHORT-QUERY SAFEGUARD ---
+    if len(lower_text.split()) <= 2 and not has_role(lower_text):
+        logger.info(f"🛡️ Safeguard triggered for: '{lower_text}' -> Sent to greeting loop")
+        return "greeting", 0.90, "English"
 
     # 🔑 INTENT CONTEXT DETECTORS
     is_first_person = any(p in lower_text for p in ["i", "i'm", "i am", "we", "my"])
@@ -705,15 +710,26 @@ def predict_intent_prototype(text: str, cached_intent=None, cached_lang=None):
 
     # --- STEP 3: INSTANT WIN GREETINGS ---
     all_greetings = {
-        "English": ["hello", "hi", "hey", "sup"],
-        "Pidgin": ["how far", "how body", "wetin dey"],
-        "Yoruba": ["ẹ n lẹ", "bawo ni"],
-        "Hausa": ["sannu", "barka"],
-        "Igbo": ["nnọọ", "ndewoo"]
+        "English": [
+            "hello",
+            "hi",
+            "hey",
+            "sup",
+            "yo",
+            "good morning",
+            "good afternoon",
+            "good evening",
+            "good day",
+            "goodnight",
+            "good night",
+            "morning",
+            "afternoon",
+            "evening"
+        ]
     }
     for lang, words in all_greetings.items():
         if any(lower_text.startswith(g) for g in words):
-            return "greeting", 0.9, lang
+            return "greeting", 0.9, "English"
 
     # --- STEP 3.5: ⚡ QUICK SELL DETECTION ---
     rule_candidates = []
