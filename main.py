@@ -1870,32 +1870,39 @@ def extract_global_location(text=None, from_number=None, context_country=None, l
     return result
 
 
-def get_targeted_ad(from_number, user_city="EVERYWHERE", user_category="ALL", user_gender="All", user_category_id=None, search_query=None, user_state=None, user_country=None):
+def get_targeted_ad(
+    from_number,
+    user_city="EVERYWHERE",
+    user_category="ALL",
+    user_gender="All",
+    user_category_id=None,
+    search_query=None,
+    user_state=None,
+    user_country=None
+):
     """
     Finds a single best-matched ad using keyword matching, targeting rules,
     and weighted rotation based on remaining budget.
     """
     try:
         ads_ref = db.collection("active_ads").where("is_active", "==", True).stream()
-
         matched_ads = []
 
         for doc in ads_ref:
             ad = doc.to_dict()
             doc_id = doc.id
 
-            # Clean categories & locations
-            ad_categories = [str(c).lower().strip() for c in ad.get("target_categories", []) if c and str(c).strip()]
-            ad_locations = [str(l).lower().strip() for l in ad.get("target_locations", []) if l and str(l).strip()]
+            # Normalize categories & locations
+            ad_categories = [str(c).lower().strip() for c in ad.get("target_categories", []) if c]
+            ad_locations = [str(l).lower().strip() for l in ad.get("target_locations", []) if l]
 
             # 🛑 Rule A: Reach Check
-            current_reach = ad.get("current_reach", 0)
-            budgeted_reach = ad.get("budgeted_reach", 0)
-
+            current_reach = int(ad.get("current_reach", 0) or 0)
             try:
-                budgeted_reach = int(budgeted_reach)
+                budgeted_reach = int(ad.get("budgeted_reach", 0))
             except (ValueError, TypeError):
-                budgeted_reach = 999999
+                # Skip ads with invalid budget instead of inflating
+                continue
 
             if current_reach >= budgeted_reach:
                 db.collection("active_ads").document(doc_id).update({"is_active": False})
@@ -1906,25 +1913,17 @@ def get_targeted_ad(from_number, user_city="EVERYWHERE", user_category="ALL", us
                 continue
 
             # 🎯 Rule C: Targeting Match
-            # 🎯 Rule C: Targeting Match (Multi-level location awareness)
             user_city_low = str(user_city or "EVERYWHERE").lower()
             user_state_low = str(user_state or "").lower()
             user_country_low = str(user_country or "").lower()
 
-            # Build a combined location string for matching
-            # This allows an ad targeting "Abuja" to match users in "Wuse 2, Abuja"
-            location_context = " ".join(filter(None, [
-                user_city_low,
-                user_state_low,
-                user_country_low
-            ]))
+            user_segments = [seg for seg in [user_city_low, user_state_low, user_country_low] if seg]
+            location_context = " ".join(user_segments)
 
             loc_match = (
-                    "everywhere" in ad_locations or
-                    any(loc in location_context for loc in ad_locations) or
-                    any(loc in user_city_low for loc in ad_locations) or
-                    any(loc in user_state_low for loc in ad_locations) or
-                    any(loc in user_country_low for loc in ad_locations)
+                "everywhere" in ad_locations or
+                any(any(seg in loc for seg in user_segments) for loc in ad_locations) or
+                any(loc in location_context for loc in ad_locations)
             )
 
             # Gender Match
@@ -1932,7 +1931,7 @@ def get_targeted_ad(from_number, user_city="EVERYWHERE", user_category="ALL", us
             usr_gen = str(user_gender or "All").capitalize()
             gen_match = ad_gen == "All" or ad_gen == usr_gen
 
-            # Category Match (keyword-aware)
+            # Category Match
             user_cat_low = str(user_category or "ALL").lower()
             query_words = [w.strip() for w in (search_query or "").lower().split() if w.strip()]
 
@@ -1940,7 +1939,7 @@ def get_targeted_ad(from_number, user_city="EVERYWHERE", user_category="ALL", us
                 "all" in ad_categories or
                 user_cat_low in ad_categories or
                 (user_category_id and str(user_category_id).lower() in ad_categories) or
-                any(word in ad_categories for word in query_words)
+                any(word in " ".join(ad_categories) for word in query_words)
             )
 
             if loc_match and gen_match and cat_match:
@@ -1951,21 +1950,28 @@ def get_targeted_ad(from_number, user_city="EVERYWHERE", user_category="ALL", us
             logger.info(f"📭 No matching ad found for {from_number} | city={user_city} | query={search_query}")
             return None
 
-        # 🎲 WEIGHTED ROTATION: Ads with more remaining budget get more impressions
+        # 🎲 Weighted rotation
         weights = [
             max(1, int(ad.get("budgeted_reach", 1)) - int(ad.get("current_reach", 0)))
             for _, ad in matched_ads
         ]
 
         doc_id, ad = random.choices(matched_ads, weights=weights, k=1)[0]
+        chosen_index = [doc[0] for doc in matched_ads].index(doc_id)
 
-        # 📊 Update reach and seen_by
-        db.collection("active_ads").document(doc_id).update({
-            "current_reach": firestore.Increment(1),
-            "seen_by": firestore.ArrayUnion([from_number])
-        })
+        # 📊 Update reach and seen_by safely
+        try:
+            db.collection("active_ads").document(doc_id).update({
+                "current_reach": firestore.Increment(1),
+                "seen_by": firestore.ArrayUnion([from_number])
+            })
+        except Exception as update_err:
+            logger.error(f"⚠️ Failed to update ad {doc_id}: {update_err}")
 
-        logger.info(f"🎯 Ad selected: {ad.get('ad_id') or doc_id} | city={user_city} | query={search_query} | remaining_budget={weights[matched_ads.index((doc_id, ad))]}")
+        logger.info(
+            f"🎯 Ad selected: {ad.get('ad_id') or doc_id} | city={user_city} | query={search_query} | remaining_budget={weights[chosen_index]}"
+        )
+
         return ad
 
     except Exception as e:
@@ -7483,16 +7489,16 @@ def handle_whatsapp_logic(data):
 
                                 # 🚀 3. PLAN B AD INJECTOR (Sync V1.5)
                                 # Display an ad even when results are empty
-                                user_city = session.get("location") or session.get("city",
-                                                                                   "EVERYWHERE")  # Suburb first, city fallback
-                                user_gender = session.get("gender", "All")
+                                user_city = session.get("city") or session.get(
+                                    "location") or "EVERYWHERE"  # City first, suburb fallback for broad ad targets
+                                user_gender = session.get("user_gender") or session.get("gender", "All")
                                 target_cat = targeting_meta.get("category", "all")
 
                                 ad_to_show = get_targeted_ad(
-                                    from_number,
-                                    user_city,
-                                    target_cat,
-                                    user_gender,
+                                    from_number=from_number,
+                                    user_city=user_city,
+                                    user_category=target_cat,
+                                    user_gender=user_gender,
                                     search_query=raw_query,
                                     user_state=session.get("state"),
                                     user_country=session.get("country")
