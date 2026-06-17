@@ -38,13 +38,9 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 
 
-# Initialize the model at start-up.
-# It will consume memory once, but it won't crash on search requests.
-# Zero-shot classifier for greeting/intent detection
-#zero_shot_pipeline = pipeline(
-#    "zero-shot-classification",
-#    model="MoritzLaurer/deberta-v3-base-mnli-fever-anli"
-#)
+GEOCODE_CACHE = {}  # { "lat,lng": result_dict }
+GEOCODE_CACHE_TTL = 3600  # 1 hour
+GEOCODE_CACHE_TIMESTAMPS = {}
 
 # --- GLOBAL AREA (The "Storage") ---
 CACHED_MARKET_TIP = {}  # Dict keyed by city
@@ -646,9 +642,17 @@ def predict_intent_prototype(text: str, cached_intent=None, cached_lang=None):
     # =========================================================
     # ✅ A. QUICK SELL (TOP PRIORITY)
     # =========================================================
-    sell_keywords = ["sell", "selling", "for sale", "wan sell", "i get"]
+    sell_keywords = [
+        "sell",
+        "selling",
+        "for sale",
+        "wan sell"
+    ]
 
-    if is_first_person and any(w in lower_text for w in sell_keywords):
+    if is_first_person and any(
+    re.search(rf"\b{re.escape(w)}\b", lower_text)
+    for w in sell_keywords
+                                ):
         logger.info("⚡ Hard Override: Quick Sell Detected")
 
         noise = r"\b(i|do|am|a|an|the|render|sell|deals|in|into|business|of|dey|service|services)\b"
@@ -1707,10 +1711,6 @@ def extract_global_location(text=None, from_number=None, context_country=None, l
 
     NO database side-effects. Returns raw data for the caller (Section 8) to manage.
     """
-    GEOCODE_CACHE = {}  # { "lat,lng": result_dict }
-    GEOCODE_CACHE_TTL = 3600  # 1 hour
-    GEOCODE_CACHE_TIMESTAMPS = {}
-
 
     # 🔄 PATH 1: Reverse Geocode from GPS Coordinates (Fixes the Akure Bug)
     if lat and lng:
@@ -1740,7 +1740,8 @@ def extract_global_location(text=None, from_number=None, context_country=None, l
                 )
 
                 if town:
-                    return {
+                    # 1. Save the dictionary to a variable named 'result' first
+                    result = {
                         "found": True,
                         "town": town,
                         "city": addr.get('city') or addr.get('town') or addr.get('municipality'),
@@ -1753,10 +1754,14 @@ def extract_global_location(text=None, from_number=None, context_country=None, l
                         "lng": lng,
                         "service": None
                     }
-                    # Store in cache
+
+                    # 2. Store it in your global cache variables so the app remembers it
                     GEOCODE_CACHE[cache_key] = result
                     GEOCODE_CACHE_TIMESTAMPS[cache_key] = current_time
+
+                    # 3. Now safely return the result and exit
                     return result
+
 
         except Exception as e:
             logger.error(f"Reverse geocoding error for coordinates ({lat}, {lng}): {e}")
@@ -1805,6 +1810,9 @@ def extract_global_location(text=None, from_number=None, context_country=None, l
     if home_country and home_country.lower() not in search_query.lower():
         search_query += f", {home_country}"
 
+    # 🛡️ Pre-define to prevent UnboundLocalError on API failures
+    location = None
+
     try:
         location = geolocator.geocode(search_query, addressdetails=True, language='en', timeout=10)
 
@@ -1847,7 +1855,17 @@ def extract_global_location(text=None, from_number=None, context_country=None, l
     final_touch = service_part.strip().capitalize() if service_part else "Service"
     result["service"] = final_touch
     result["name"] = result["town"]
-    result["display_name"] = location.address if location else None
+
+    # 🛡️ Safe guard against missing 'location' variable from a 429 exception
+    if 'location' in locals() and location and hasattr(location, 'address'):
+        result["display_name"] = location.address
+    else:
+        result["display_name"] = "Unknown Location, Nigeria"
+
+    # 💾 Save text query to the global cache before returning
+    if text:
+        GEOCODE_CACHE[cache_key] = result
+        GEOCODE_CACHE_TIMESTAMPS[cache_key] = time.time()
 
     return result
 
