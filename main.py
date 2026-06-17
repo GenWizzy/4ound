@@ -557,7 +557,18 @@ def predict_intent_prototype(text: str, cached_intent=None, cached_lang=None):
 
     # Added "list" and "post" to the provider triggers
     is_active_provider = any(
-        p in lower_text for p in ["i am", "i'm", "my service", "register", "onboard", "list", "post"]
+        p in lower_text for p in [
+            "i am",
+            "i'm",
+            "i do",
+            "i offer",
+            "i provide",
+            "my service",
+            "register",
+            "onboard",
+            "list",
+            "post"
+        ]
     ) or has_role(lower_text)
 
     # Special handling for "I sell"
@@ -595,7 +606,18 @@ def predict_intent_prototype(text: str, cached_intent=None, cached_lang=None):
         return "greeting", 0.90, "English"
 
     # 🔑 INTENT CONTEXT DETECTORS
-    is_first_person = any(p in lower_text for p in ["i", "i'm", "i am", "we", "my"])
+    is_first_person = any(
+        p in lower_text for p in [
+            "i",
+            "i'm",
+            "i am",
+            "i do",
+            "i offer",
+            "i provide",
+            "we",
+            "my"
+        ]
+    )
     is_search_intent = any(w in lower_text for w in ["need", "find", "looking", "search", "buy"])
 
     # ✅ 🔥 HARD OVERRIDE: SEARCH QUESTIONS  👈 ADD IT HERE
@@ -606,6 +628,16 @@ def predict_intent_prototype(text: str, cached_intent=None, cached_lang=None):
         r"who sells",
         r"anywhere i can get"
     ]
+
+    provider_patterns = [
+        r"^i do\s+",
+        r"^i offer\s+",
+        r"^i provide\s+"
+    ]
+
+    if any(re.search(p, lower_text, re.IGNORECASE) for p in provider_patterns):
+        logger.info("⚡ Hard Override: Provider Detected")
+        return "offer", 0.99, detected_lang
 
     if any(re.search(p, lower_text, re.IGNORECASE) for p in search_question_patterns):
         logger.info("⚡ Hard Override: Search Intent Detected")
@@ -619,7 +651,7 @@ def predict_intent_prototype(text: str, cached_intent=None, cached_lang=None):
     if is_first_person and any(w in lower_text for w in sell_keywords):
         logger.info("⚡ Hard Override: Quick Sell Detected")
 
-        noise = r"\b(i|want|to|sell|my|an|old|used|clean|fairly|a|pair|of|get|for|sale)\b"
+        noise = r"\b(i|do|am|a|an|the|render|sell|deals|in|into|business|of|dey|service|services)\b"
         item_raw = re.sub(noise, "", lower_text).strip()
 
         loc_bridges = r"\b(?:in|at|near|around|inside|close\s+to|by)\b"
@@ -2732,20 +2764,27 @@ def clean_for_display(text):
 
     # Phrases that start a sentence
     prefixes = [
+        "i am looking for",
+        "i'm looking for",
+        "i'm searching for",
+
         "i am an",
         "i am a",
         "i'm an",
         "i'm a",
+
+        "i do",
+        "i offer",
+        "i provide",
+
         "i am",
         "i need",
         "i want",
-        "i am looking for",
-        "i'm looking for",
+
         "where can i get",
         "can i find",
         "show me",
         "find me",
-        "i'm searching for",
         "search for",
         "looking for"
     ]
