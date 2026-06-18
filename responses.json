@@ -39,9 +39,9 @@
     "Please tell me the *name or title* of your item. 📝 (Example: 'PS5 Console' or 'Office Desk')."
   ],
   "ask_item_info": [
-  "Got it! Now, tell me more about the *condition and specs* of this {item}. 📝 (e.g., 'Slightly used' or 'Size 42, no scratches').",
-  "Nice choice! Can you give a quick description of the {item}? 🔍 (e.g., 'Bought 2 months ago...').",
-  "Great. Please share a few more details about the state of your {item}. 🛠️ (Example: 'Almost brand new...')."
+  "Got it! Describe the *{item}* — condition, brand, specs, and any keywords buyers might search for. 📝\n\n_(Example: 'iPhone 12 Pro Max, 256GB, black, excellent condition, original charger included')_",
+  "Nice! Tell buyers about this *{item}* in detail. Good descriptions get more views! 🔍\n\n_(Example: 'Fairly used Toyota Camry 2018, leather seats, reverse camera, Lagos')_",
+  "Great. Share the full details of your *{item}* — brand, size, condition, anything important! 🛠️\n\n_(Example: 'Almost brand new Tecno Spark 8, 64GB, comes with box and accessories')_"
 ],
   "ask_photo": [
     "📸 Great details! Now, please **send a clear photo** of the {item} so buyers can see it.",
@@ -65,9 +65,10 @@
   "Let's find the right people for your opening. 👥"
 ],
   "ask_job_details": [
-    "What are the requirements for this position? 📄",
-    "What should applicants know about the job? 📄"
-  ],
+  "Describe the role and requirements. Include job title keywords so job seekers find it! 📄\n\n_(Example: 'Looking for an experienced driver, must have valid license, Abuja based, Monday to Saturday')_",
+  "What should applicants know? Include the job title and skills needed! 💼\n\n_(Example: 'Hiring a chef for a restaurant in Lekki Lagos, experience in continental and local cuisine required')_",
+  "Tell us about this position in detail. The more specific you are, the better candidates you attract! 🎯\n\n_(Example: 'Need a security guard for a shopping mall in Wuse 2, night shift, must have NSCDC training')_"
+],
   "ask_job_salary": [
     "What is the pay for this position? 💰 (e.g., 200k or 150000)",
     "How much are you offering for the job 💰 (e.g., 50k or 400,000)"
@@ -89,9 +90,9 @@
   "Let's get your {item} service listed so locals can find you!\n\n_(Type *reset* if you need to start fresh)_"
 ],
   "ask_details": [
-  "Tell us more about your {item} services. 🛠️",
-  "Describe the {item} services you offer. 📝",
-  "What should customers know about your {item} services?"
+  "Tell us more about your *{item}* service. Include keywords customers might search for! 🛠️\n\n_(Example: 'I fix leaking pipes, blocked drains, bathroom installation in Abuja')_",
+  "Describe your *{item}* service in detail. The more keywords you use, the easier customers find you! 📝\n\n_(Example: 'Professional electrician, wiring, repairs, generator installation, Lagos')_",
+  "What should customers know about your *{item}* service? Be specific — keywords help people find you! 🔍\n\n_(Example: 'Expert tailor for native wear, suits, gowns — fast delivery in Wuse')_"
 ],
   "start_generic": [
   "Ready to put your business on the map? I just need a few details.",
@@ -99,10 +100,10 @@
   "Great! Let's set up your business profile."
 ],
   "ask_details_generic": [
-  "Great! Tell us more about the service you offer.",
-  "Describe your business in a few words so customers can find you.",
-  "What kind of service do you provide?",
-  "Tell customers what your business does."
+  "Describe your service in detail — include what you do and where you operate! 📝\n\n_(Example: 'I am a tailor specializing in native wear and suits, based in Wuse Abuja')_",
+  "What service do you offer? Be specific so customers can find you easily! 🔍\n\n_(Example: 'Home cleaning, deep cleaning, office cleaning — Garki and Maitama')_",
+  "Tell customers what your business does. Include your skills and location for better visibility! 🚀\n\n_(Example: 'Graphic designer, logo design, flyers, branding — available everywhere')_",
+  "Describe your work in a few sentences. Mention your specialty and area! 🛠️\n\n_(Example: 'Mobile phone repairs, screen replacement, battery swap — Kubwa Abuja')_"
 ],
   "ask_name": "What is your *Name, Business/Company or Brand Name*?",
   "ask_phone": "Great! *{price}* sounds like a fair rate. What *Number/WhatsApp number* should customers use to contact you? 📞",
