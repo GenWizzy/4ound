@@ -4804,23 +4804,39 @@ def handle_whatsapp_logic(data):
                                             addr_display = "Location on request"
                                             maps_link_display = "No link available"
 
-                                        # 3. Dynamic Money Labeling (Using 'compensation' vs 'price')
+                                        # 3. Dynamic Money Labeling (V4 - Dynamic Geocentric Fix with Info Warnings)
                                         comp_val = data.get("compensation")  # For services/jobs
                                         price_val = data.get("price")  # For products
 
                                         if category == "job":
                                             label = "💰 *Salary:*"
-                                            price_display = comp_val or "Disclosed on interview"
+                                            if comp_val:
+                                                # Use engine to preserve dynamic currency matching for jobs (e.g. ₦300k/month, $15/hour)
+                                                _, _, formatted_comp = parse_nigerian_price(str(comp_val),
+                                                                                            wa_id=from_number)
+                                                price_display = f"{formatted_comp} _(Subject to change)_ ⚠️"
+                                            else:
+                                                price_display = "Disclosed on interview"
+
                                         elif category == "service":
                                             label = "💳 *Rate:*"
-                                            price_display = comp_val or "Contact for Quote"
+                                            if comp_val:
+                                                # Use engine to preserve dynamic currency matching for local professional rates
+                                                _, _, formatted_comp = parse_nigerian_price(str(comp_val),
+                                                                                            wa_id=from_number)
+                                                price_display = f"{formatted_comp} _(Subject to change)_ ⚠️"
+                                            else:
+                                                price_display = "Contact for Quote"
+
                                         else:
                                             label = "💰 *Price:*"
-                                            try:
-                                                # Only try to format as ₦ if it's a number
-                                                price_display = f"₦{float(price_val):,.0f}" if price_val else "Negotiable"
-                                            except:
-                                                price_display = price_val or "Negotiable"
+                                            if price_val:
+                                                # 🚀 Use your parser to pull the correct global symbol and formatting!
+                                                _, _, formatted_price = parse_nigerian_price(str(price_val),
+                                                                                             wa_id=from_number)
+                                                price_display = f"{formatted_price} _(Subject to change)_ ⚠️"
+                                            else:
+                                                price_display = "Negotiable"
 
                                         # 4. Contact
                                         contact = data.get("contact_phone") or data.get("biz_phone") or "N/A"

@@ -1,7 +1,7 @@
 {
   "English": {
     "search": {
-      "search_header": "🔍 *4ound these matches near you:*",
+      "search_header": "🔍 *_4ound these matches near you:_*",
       "searching_start": [
         "Searching for {item} near you now...",
         "Checking the 4ound map for {item} for you!",
@@ -105,7 +105,7 @@
   "Tell customers what your business does."
 ],
   "ask_name": "What is your *Name, Business/Company or Brand Name*?",
-  "ask_phone": "Great! What *Number/WhatsApp number* should customers use to contact you? 📞",
+  "ask_phone": "Great! *{price}* sounds like a fair rate. What *Number/WhatsApp number* should customers use to contact you? 📞",
   "ask_visibility": "How should customers find you?\n\n1. *Physical Shop* 📍 (People can visit me)\n2. *Delivery Only* 🚚 (Hide my house address)\n\n*Please reply with 1 or 2*",
   "ask_location": "Final step! 📍 Please share your office/shop location.",
   "phone_error": "❌ Please provide a valid phone number so customers can reach you.",
