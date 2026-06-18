@@ -4562,7 +4562,7 @@ def handle_whatsapp_logic(data):
                                 commit_session(from_number, session)
 
                                 guarded_send(phone_number_id, from_number,
-                                             f"📍 I've updated your location to *{refreshed_city}*! What would you like to find? (e.g., 'Boutique')",
+                                             f"📍 I've updated your location to *{refreshed_city}*! What would you like to find? ",
                                              message_id)
                                 return
 
