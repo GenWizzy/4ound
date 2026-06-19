@@ -5571,8 +5571,8 @@ def handle_whatsapp_logic(data):
                             if current_flow and current_flow.startswith("admin_ad_"):
                                 if current_flow == "admin_ad_name":
                                     biz_name = text.strip()
-                                    session["ad_draft"] = {}  # 🧼 Fresh initialize to flush out old abandoned drafts
-                                    # Clean name for the ID
+                                    session["ad_draft"] = {}
+
                                     clean_name = re.sub(r'\W+', '', biz_name.replace(" ", "_"))
                                     ad_id = f"{clean_name}_{random.randint(100, 999)}"
 
@@ -5585,11 +5585,15 @@ def handle_whatsapp_logic(data):
                                         f"✅ *Business Name Saved.*\n"
                                         f"🆔 Generated ID: `{ad_id}`\n\n"
                                         f"📍 *Step 2: Target Location*\n"
-                                        f"Which cities should see this ad?\n"
-                                        f"(e.g., 'Abuja, Lagos' or send 'All')."
+                                        f"Please send your location pin 📌 OR type the city name(s) below."
                                     )
                                     guarded_send(phone_number_id, from_number, msg, message_id)
+
+                                    # 🟢 TRIGGER THE NATIVE PIN PICKER HERE
+                                    send_location_request(from_number, "Tap below to select your target location pin.")
+
                                     return
+
 
                                 # --- STEP 3: SAVE LOCATION (PIN, TEXT, OR EVERYWHERE) ---
                                 elif current_flow == "admin_ad_location":
