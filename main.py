@@ -5457,10 +5457,12 @@ def handle_whatsapp_logic(data):
                                     commit_session(from_number, session)
 
                                     msg = (
-                                        f"📍 **Location(s) Set:** {', '.join(locations)}\n\n"
+                                        f"📍 *Location(s) Set:* {', '.join(locations)}\n\n"
                                         f"🎯 *Step 3: Target Categories*\n"
-                                        f"Which keywords trigger this?\n"
-                                        f"(e.g., 'Real Estate' or send 'All' for any search)."
+                                        f"What kind of people should see this ad?\n\n"
+                                        f"Type the services or products your ad is related to.\n"
+                                        f"_(Example: 'plumber, electrician' shows your ad to people searching for those services)_\n\n"
+                                        f"Or type *All* to show to everyone."
                                     )
                                     guarded_send(phone_number_id, from_number, msg, message_id)
                                     return
@@ -5494,9 +5496,11 @@ def handle_whatsapp_logic(data):
                                     commit_session(from_number, session)
 
                                     msg = (
-                                        f"👥 **Gender Set:** {gender_input}\n\n"
-                                        f"📈 *Step 5: Reach*\n"
-                                        f"How many unique people should see this ad before it stops?"
+                                        f"👥 *Gender Set:* {gender_input}\n\n"
+                                        f"📈 *Step 5: Reach / Budget*\n"
+                                        f"How many people should see this ad in total before it stops showing?\n\n"
+                                        f"_(Example: type '500' and your ad will show to 500 unique people then stop automatically)_\n\n"
+                                        f"Tip: Start with 200-500 for a test run."
                                     )
                                     guarded_send(phone_number_id, from_number, msg, message_id)
                                     return
