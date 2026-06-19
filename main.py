@@ -15,6 +15,7 @@ from logging.handlers import RotatingFileHandler
 from datetime import datetime, timedelta, timezone
 from collections import deque
 from typing import Union, Dict, List
+from math import radians, sin, cos, sqrt, atan2
 
 # Flask & External Services
 from flask import Flask, request, jsonify
@@ -1870,6 +1871,26 @@ def extract_global_location(text=None, from_number=None, context_country=None, l
     return result
 
 
+
+
+def haversine_distance(lat1, lon1, lat2, lon2):
+    R = 6371.0
+
+    dlat = radians(lat2 - lat1)
+    dlon = radians(lon2 - lon1)
+
+    a = (
+        sin(dlat / 2) ** 2
+        + cos(radians(lat1))
+        * cos(radians(lat2))
+        * sin(dlon / 2) ** 2
+    )
+
+    c = 2 * atan2(sqrt(a), sqrt(1 - a))
+
+    return R * c
+
+
 def get_targeted_ad(
     from_number,
     user_city="EVERYWHERE",
@@ -1878,17 +1899,27 @@ def get_targeted_ad(
     user_category_id=None,
     search_query=None,
     user_state=None,
-    user_country=None
+    user_country=None,
+    user_lat=None,
+    user_lng=None,
+    smart_data=None  # 🟢 Accept smart_data context safely
 ):
     """
-    Finds a single best-matched ad using keyword matching, targeting rules,
-    and weighted rotation based on remaining budget.
+    Finds a single best-matched ad using keyword matching,
+    geographic targeting, and weighted rotation.
     """
     try:
+        # 🟢 Fallback to prevent UnboundLocalError down the line
+        if smart_data is None:
+            smart_data = {}
+
         ads_ref = db.collection("active_ads").where("is_active", "==", True).stream()
+
+        # 🟢 INITIALIZE THE LIST HERE TO CLEAR THE RED UNDERLINE
         matched_ads = []
 
         for doc in ads_ref:
+
             ad = doc.to_dict()
             doc_id = doc.id
 
@@ -1898,71 +1929,185 @@ def get_targeted_ad(
 
             # 🛑 Rule A: Reach Check
             current_reach = int(ad.get("current_reach", 0) or 0)
+
             try:
                 budgeted_reach = int(ad.get("budgeted_reach", 0))
             except (ValueError, TypeError):
-                # Skip ads with invalid budget instead of inflating
                 continue
 
             if current_reach >= budgeted_reach:
-                db.collection("active_ads").document(doc_id).update({"is_active": False})
+                db.collection("active_ads").document(doc_id).update({
+                    "is_active": False
+                })
                 continue
 
             # 🛑 Rule B: Anti-Spam
             if from_number in ad.get("seen_by", []):
                 continue
 
-            # 🎯 Rule C: Targeting Match
-            user_city_low = str(user_city or "EVERYWHERE").lower()
-            user_state_low = str(user_state or "").lower()
-            user_country_low = str(user_country or "").lower()
+            # ====================================================
 
-            user_segments = [seg for seg in [user_city_low, user_state_low, user_country_low] if seg]
-            location_context = " ".join(user_segments)
+            target_lat = ad.get("target_lat")
+            target_lng = ad.get("target_lng")
+            target_radius = ad.get("target_radius_km")
 
-            loc_match = (
-                "everywhere" in ad_locations or
-                any(any(seg in loc for seg in user_segments) for loc in ad_locations) or
-                any(loc in location_context for loc in ad_locations)
+            loc_match = False
+
+            # Case A: Hyper-local Pin-Radius Targeting (Runs if both ad and user have coordinates)
+            if target_lat is not None and target_lng is not None and target_radius is not None and user_lat is not None and user_lng is not None:
+                try:
+                    distance_km = calculate_distance(
+                        float(user_lat), float(user_lng),
+                        float(target_lat), float(target_lng)
+                    )
+                    loc_match = (distance_km is not None) and (distance_km <= float(target_radius))
+                except Exception as geo_err:
+                    logger.error(f"❌ Radius math calculation error for ad {doc_id}: {geo_err}")
+                    loc_match = False
+
+            # Case B: Traditional Text-Based Matching (Fallback if ad has no coords OR if user coords are missing mid-flow)
+            if not loc_match:
+                user_city_low = str(user_city or "EVERYWHERE").lower()
+                user_state_low = str(user_state or "").lower()
+                user_country_low = str(user_country or "").lower()
+
+                user_segments = [seg for seg in [user_city_low, user_state_low, user_country_low] if seg]
+                location_context = " ".join(user_segments)
+
+                loc_match = (
+                        "everywhere" in ad_locations or
+                        any(any(seg in loc for seg in user_segments) for loc in ad_locations) or
+                        any(loc in location_context for loc in ad_locations)
+                )
+
+            # If location tracking doesn't check out, skip the rest of the loops early
+            if not loc_match:
+                continue
+
+            # ====================================================
+            # 👥 GENDER MATCH
+            # ====================================================
+
+            ad_gen = str(
+                ad.get("target_gender", "All")
+            ).capitalize()
+
+            usr_gen = str(
+                user_gender or "All"
+            ).capitalize()
+
+            gen_match = (
+                ad_gen == "All"
+                or
+                ad_gen == usr_gen
             )
 
-            # Gender Match
-            ad_gen = str(ad.get("target_gender", "All")).capitalize()
-            usr_gen = str(user_gender or "All").capitalize()
-            gen_match = ad_gen == "All" or ad_gen == usr_gen
+            # ====================================================
+            # 🎯 CATEGORY MATCH
+            # ====================================================
 
-            # Category Match
-            user_cat_low = str(user_category or "ALL").lower()
-            query_words = [w.strip() for w in (search_query or "").lower().split() if w.strip()]
+            user_cat_low = str(
+                user_category or "ALL"
+            ).lower()
+
+            query_words = [
+                w.strip()
+                for w in (search_query or "").lower().split()
+                if w.strip()
+            ]
 
             cat_match = (
-                "all" in ad_categories or
-                user_cat_low in ad_categories or
-                (user_category_id and str(user_category_id).lower() in ad_categories) or
-                any(word in " ".join(ad_categories) for word in query_words)
+                "all" in ad_categories
+                or
+                user_cat_low in ad_categories
+                or
+                (
+                    user_category_id
+                    and
+                    str(user_category_id).lower() in ad_categories
+                )
+                or
+                any(
+                    word in " ".join(ad_categories)
+                    for word in query_words
+                )
             )
 
-            if loc_match and gen_match and cat_match:
+            # ====================================================
+            # FINAL MATCH
+            # ====================================================
+
+            # 🎯 Audience Match
+            target_audience = ad.get("target_audience", "both")
+            is_lister_context = smart_data.get("is_lister", False)  # Pass this from call site
+
+            audience_match = (
+                    target_audience == "both" or
+                    (target_audience == "searchers" and not is_lister_context) or
+                    (target_audience == "listers" and is_lister_context)
+            )
+
+            # 🎯 Listing Type Match (only relevant for listers)
+            target_listing_types = ad.get("target_listing_types", [])
+            current_listing_type = smart_data.get("listing_type", "")
+
+            listing_type_match = (
+                    not target_listing_types or  # No restriction set
+                    not is_lister_context or  # Not a lister context
+                    any(t in current_listing_type for t in target_listing_types)
+            )
+
+            if loc_match and gen_match and cat_match and audience_match and listing_type_match:
                 matched_ads.append((doc_id, ad))
 
-        # 🎯 No matches found
+        # No Matches
         if not matched_ads:
-            logger.info(f"📭 No matching ad found for {from_number} | city={user_city} | query={search_query}")
+            logger.info(
+                f"📭 No matching ad found for {from_number} "
+                f"| city={user_city} "
+                f"| query={search_query}"
+            )
             return None
 
-        # 🎲 Weighted rotation
+        # ====================================================
+        # 🎲 WEIGHTED ROTATION
+        # ====================================================
+
         weights = [
-            max(1, int(ad.get("budgeted_reach", 1)) - int(ad.get("current_reach", 0)))
+            max(
+                1,
+                int(ad.get("budgeted_reach", 1))
+                -
+                int(ad.get("current_reach", 0))
+            )
             for _, ad in matched_ads
         ]
 
-        doc_id, ad = random.choices(matched_ads, weights=weights, k=1)[0]
-        remaining = max(1, int(ad.get("budgeted_reach", 1)) - int(ad.get("current_reach", 0)))
-        logger.info(
-            f"🎯 Ad selected: {ad.get('ad_id') or doc_id} | city={user_city} | query={search_query} | remaining_budget={remaining}"
+        doc_id, ad = random.choices(
+            matched_ads,
+            weights=weights,
+            k=1
+        )[0]
+
+        remaining = max(
+            1,
+            int(ad.get("budgeted_reach", 1))
+            -
+            int(ad.get("current_reach", 0))
         )
 
-        return {"doc_id": doc_id, **ad}
+        logger.info(
+            f"🎯 Ad selected: "
+            f"{ad.get('ad_id') or doc_id} "
+            f"| city={user_city} "
+            f"| query={search_query} "
+            f"| remaining_budget={remaining}"
+        )
+
+        return {
+            "doc_id": doc_id,
+            **ad
+        }
 
     except Exception as e:
         logger.error(f"❌ Error fetching ad: {e}")
@@ -2048,18 +2193,28 @@ def finalize_listing_to_db(from_number, listing_doc, user_session):
 
         display_name = listing_doc.get("title", "Listing")
 
-        # --- 🟢 NEW: TARGETED AD INJECTION ---
-        user_city = user_session.get("location", "EVERYWHERE")
+        # --- 🟢 UPDATED: TARGETED AD INJECTION WITH SMART CONTEXT ---
+        user_city = user_session.get("location") or user_session.get("city", "EVERYWHERE")
         user_gender = user_session.get("gender", "All")
         user_cat = listing_doc.get("category", "ALL")
 
+        # 🟢 Capture the listing type for the ad engine
+        listing_type = listing_doc.get("listing_type", "service")
+
         targeted_ad = get_targeted_ad(
-            from_number,
-            user_city,
-            user_cat,
-            user_gender,
+            from_number=from_number,
+            user_city=user_city,
+            user_category=user_cat,
+            user_gender=user_gender,
             user_state=user_session.get("state"),
-            user_country=user_session.get("country")
+            user_country=user_session.get("country"),
+            user_lat=user_session.get("user_lat"),
+            user_lng=user_session.get("user_lng"),
+            # 🟢 REQUIRED: Pass the context so the ad engine knows this is a lister
+            smart_data={
+                "is_lister": True,
+                "listing_type": listing_type
+            }
         )
 
         review_note = "Our safety AI is reviewing your photo." if image_id else "Your business is now live."
@@ -2074,11 +2229,15 @@ def finalize_listing_to_db(from_number, listing_doc, user_session):
             f"⚙️ *Manage:* Type *'manage listings'* to see or delete all your posts. 🚀"
         )
 
-        return success_msg
+        return success_msg, targeted_ad
+
+
 
     except Exception as e:
+
         logging.error(f"Error finalizing to DB: {e}")
-        return "⚠️ Technical glitch. Please type 'reset' and try again."
+
+        return "⚠️ Technical glitch. Please type 'reset' and try again.", None
 
 
 def deliver_ad(phone_number_id, from_number, ad_data, message_id):
@@ -2088,31 +2247,35 @@ def deliver_ad(phone_number_id, from_number, ad_data, message_id):
     raw_content = ad_data.get("body") or ad_data.get("content") or ""
     media_id = ad_data.get("media_id") or ad_data.get("image_id")
     ad_type = ad_data.get("type", "text")
-    ad_id = ad_data.get("doc_id") or ad_data.get("ad_id")  # ✅ doc_id first, ad_id as fallback
+
+    # 🎯 TARGETED DOCUMENT FIX: Isolate the absolute Firestore document key
+    # 'doc_id' is explicitly set by get_targeted_ad as the definitive database reference
+    doc_id = ad_data.get("doc_id")
 
     # 🏷️ THE SPONSORED LABEL
     sponsored_label = "✨ *Featured* | "
     final_content = f"{sponsored_label}{raw_content}"
 
     try:
-        # 1. SEND THE MESSAGE
+        # 1. SEND THE MESSAGE VIA WHATSAPP
         if ad_type == "image" and media_id:
             send_whatsapp_image(phone_number_id, from_number, media_id, final_content)
         else:
             guarded_send(phone_number_id, from_number, final_content, message_id)
 
-        # 2. 📈 UPDATE REACH (Only here — not in get_targeted_ad)
-        if ad_id:
-            ad_ref = db.collection("active_ads").document(ad_id)
+        # 2. 📈 UPDATE REACH METRICS IN FIRESTORE
+        if doc_id:
+            ad_ref = db.collection("active_ads").document(str(doc_id).strip())
             ad_ref.update({
                 "current_reach": firestore.Increment(1),
                 "seen_by": firestore.ArrayUnion([from_number])
             })
-            logger.info(f"📢 Ad {ad_id} delivered & reach updated for {from_number}")
+            logger.info(f"📢 Ad {doc_id} delivered & reach updated for {from_number}")
+        else:
+            logger.warning(f"⚠️ Ad delivered to {from_number} but skipped tracking update due to missing 'doc_id'")
 
     except Exception as e:
-        logger.error(f"❌ Failed to deliver or track ad {ad_id}: {e}")
-
+        logger.error(f"❌ Failed to deliver or track ad {doc_id or 'UNKNOWN'}: {e}")
 
 
 def calculate_distance(lat1, lon1, lat2, lon2):
@@ -5408,6 +5571,7 @@ def handle_whatsapp_logic(data):
                             if current_flow and current_flow.startswith("admin_ad_"):
                                 if current_flow == "admin_ad_name":
                                     biz_name = text.strip()
+                                    session["ad_draft"] = {}  # 🧼 Fresh initialize to flush out old abandoned drafts
                                     # Clean name for the ID
                                     clean_name = re.sub(r'\W+', '', biz_name.replace(" ", "_"))
                                     ad_id = f"{clean_name}_{random.randint(100, 999)}"
@@ -5418,7 +5582,7 @@ def handle_whatsapp_logic(data):
                                     commit_session(from_number, session)
 
                                     msg = (
-                                        f"✅ **Business Name Saved.**\n"
+                                        f"✅ *Business Name Saved.*\n"
                                         f"🆔 Generated ID: `{ad_id}`\n\n"
                                         f"📍 *Step 2: Target Location*\n"
                                         f"Which cities should see this ad?\n"
@@ -5435,10 +5599,22 @@ def handle_whatsapp_logic(data):
                                     if msg_type == "location":
                                         loc_data = message.get("location", {})
                                         lat, lng = loc_data.get("latitude"), loc_data.get("longitude")
-                                        # ✅ Use new dual-path signature
-                                        geo = extract_global_location(lat=lat, lng=lng, from_number=from_number)
+
+                                        geo = extract_global_location(
+                                            lat=lat,
+                                            lng=lng,
+                                            from_number=from_number
+                                        )
+
                                         locations = [geo.get("town") or geo.get("name")] if geo.get("found") else [
                                             "Unknown"]
+
+                                        # 🆕 Save the actual coordinates
+                                        session["ad_draft"]["target_lat"] = lat
+                                        session["ad_draft"]["target_lng"] = lng
+
+                                        # Default radius if you want one
+                                        session["ad_draft"]["target_radius_km"] = 10
                                     elif input_text in ["everywhere", "world", "all", "global"]:
                                         locations = ["EVERYWHERE"]
                                     else:
@@ -5453,18 +5629,69 @@ def handle_whatsapp_logic(data):
                                             locations = [loc.strip().title() for loc in text.split(",")]
 
                                     session["ad_draft"]["target_locations"] = locations
-                                    session["flow"] = "admin_ad_category"
+                                    if msg_type == "location":
+                                        session["flow"] = "admin_ad_radius"
+                                    else:
+                                        session["flow"] = "admin_ad_category"
                                     commit_session(from_number, session)
 
-                                    msg = (
-                                        f"📍 *Location(s) Set:* {', '.join(locations)}\n\n"
-                                        f"🎯 *Step 3: Target Categories*\n"
-                                        f"What kind of people should see this ad?\n\n"
-                                        f"Type the services or products your ad is related to.\n"
-                                        f"_(Example: 'plumber, electrician' shows your ad to people searching for those services)_\n\n"
-                                        f"Or type *All* to show to everyone."
-                                    )
+                                    if msg_type == "location":
+                                        msg = (
+                                            f"📍 Location saved.\n\n"
+                                            f"How many kilometers around this pin should the advert reach?\n\n"
+                                            f"Examples:\n"
+                                            f"5\n"
+                                            f"10\n"
+                                            f"25\n"
+                                            f"50"
+                                        )
+                                    else:
+                                        msg = (
+                                            f"📍 *Location(s) Set:* {', '.join(locations)}\n\n"
+                                            f"🎯 *Step 3: Target Categories*\n"
+                                            f"What kind of people should see this ad?\n\n"
+                                            f"Type the services or products your ad is related to.\n\n"
+                                            f"Or type *All* to show to everyone."
+                                        )
                                     guarded_send(phone_number_id, from_number, msg, message_id)
+                                    return
+
+                                # --- STEP 3B: SAVE PIN RADIUS ---
+                                elif current_flow == "admin_ad_radius":
+                                    try:
+                                        radius = int(text.strip())
+
+                                        if radius < 1 or radius > 500:
+                                            guarded_send(
+                                                phone_number_id,
+                                                from_number,
+                                                "❌ Radius must be between 1 and 500 km.",
+                                                message_id
+                                            )
+                                            return
+
+                                        session["ad_draft"]["target_radius_km"] = radius
+                                        session["flow"] = "admin_ad_category"
+                                        commit_session(from_number, session)
+
+                                        msg = (
+                                            f"📍 Radius Set: {radius} km\n\n"
+                                            f"🎯 *Step 3: Target Categories*\n"
+                                            f"What kind of people should see this ad?\n\n"
+                                            f"Type the services or products your ad is related to.\n\n"
+                                            f"Or type *All* to show to everyone."
+                                        )
+
+                                        guarded_send(phone_number_id, from_number, msg, message_id)
+
+                                    except ValueError:
+                                        guarded_send(
+                                            phone_number_id,
+                                            from_number,
+                                            "❌ Enter a valid radius in kilometers (e.g. 10).",
+                                            message_id
+                                        )
+
                                     return
 
                                 # --- STEP 4: SAVE CATEGORY -> ASK GENDER ---
@@ -5473,25 +5700,155 @@ def handle_whatsapp_logic(data):
                                     if input_text in ["all", "any", "everything"]:
                                         categories = ["ALL"]
                                     else:
-                                        categories = [cat.strip().lower() for cat in text.split(",")]
+                                        categories = []
+                                        for cat in text.split(","):
+                                            cleaned_cat = cat.strip().lower()
+                                            if cleaned_cat in ["job", "jobs", "employment", "recruitment", "vacancy",
+                                                               "vacancies"]:
+                                                categories.append("job")
+                                            else:
+                                                categories.append(cleaned_cat)
 
                                     session["ad_draft"]["target_categories"] = categories
+                                    session["flow"] = "admin_ad_audience"
+
+                                    commit_session(from_number, session)
+
+                                    send_interactive_button(
+                                        phone_number_id,
+                                        from_number,
+                                        f"🎯 *Categories Set:* {', '.join(categories)}\n\n"
+                                        f"👥 *Step 4: Target Audience*\n"
+                                        f"Who should see this ad?\n\n"
+                                        f"• *Searchers* — People searching for something\n"
+                                        f"• *Listers* — People registering a business or listing\n"
+                                        f"• *Both* — Everyone",
+                                        buttons_list=[
+                                            {"id": "audience_search", "title": "Searchers 🔍"},
+                                            {"id": "audience_list", "title": "Listers 📋"},
+                                            {"id": "audience_both", "title": "Both 👥"}
+                                        ]
+                                    )
+                                    return
+
+                                # --- STEP 4B: SAVE AUDIENCE -> ASK LISTING TYPE OR GENDER ---
+                                elif current_flow == "admin_ad_audience":
+                                    # Safe extraction against NoneType errors if they type text manually
+                                    interactive_data = message.get("interactive") or {}
+                                    btn_id = interactive_data.get("button_reply", {}).get("id", "")
+
+                                    # Normalize plain text typing as a bulletproof fallback
+                                    clean_text = (text or "").strip().lower()
+
+                                    audience_map = {
+                                        "audience_search": "searchers",
+                                        "audience_list": "listers",
+                                        "audience_both": "both"
+                                    }
+
+                                    if btn_id:
+                                        audience = audience_map.get(btn_id, "both")
+                                    else:
+                                        # Deduce from text if they typed instead of clicking a button
+                                        if "search" in clean_text or "find" in clean_text:
+                                            audience = "searchers"
+                                        elif "list" in clean_text or "sell" in clean_text or "provid" in clean_text or "post" in clean_text:
+                                            audience = "listers"
+                                        else:
+                                            audience = "both"
+
+                                    session["ad_draft"]["target_audience"] = audience
+
+                                    # 🟢 FIX: Transition to next step and send corresponding message
+                                    if audience in ["listers", "both"]:
+                                        session["flow"] = "admin_ad_listing_type"
+                                        commit_session(from_number, session)
+
+                                        send_interactive_button(
+                                            phone_number_id,
+                                            from_number,
+                                            f"👥 *Audience Set:* {audience.title()}\n\n"
+                                            f"📋 *Step 4C: Listing Types*\n"
+                                            f"Which type of listers should see this ad?",
+                                            buttons_list=[
+                                                {"id": "ltype_all", "title": "All Types"},
+                                                {"id": "ltype_service", "title": "Services 🛠️"},
+                                                {"id": "ltype_product", "title": "Products 🛍️"}
+                                            ]
+                                        )
+                                    else:
+                                        # Only this branch should trigger the Step 5 text prompt
+                                        session["ad_draft"]["target_listing_types"] = []
+                                        session["flow"] = "admin_ad_gender"
+                                        commit_session(from_number, session)
+
+                                        msg = (
+                                            f"👥 *Audience Set:* Searchers only\n\n"
+                                            f"👤 *Step 5: Target Gender*\n"
+                                            f"Who should see this?\n"
+                                            f"(Reply: 'Male', 'Female', or 'All')."
+                                        )
+                                        guarded_send(phone_number_id, from_number, msg, message_id)
+
+                                    return
+
+
+                                # --- STEP 4C: SAVE LISTING TYPE -> ASK GENDER ---
+                                elif current_flow == "admin_ad_listing_type":
+                                    interactive_data = message.get("interactive") or {}
+                                    btn_id = interactive_data.get("button_reply", {}).get("id", "")
+                                    clean_text = (text or "").strip().lower()
+
+                                    listing_type_map = {
+                                        "ltype_all": ["service", "product", "job"],
+                                        "ltype_service": ["service", "professional"],
+                                        "ltype_product": ["product", "quick_sale"]
+                                    }
+
+                                    if btn_id:
+                                        listing_types = listing_type_map.get(btn_id, ["service", "product", "job"])
+                                    else:
+                                        # Explicit text parser safety net if they typed text
+                                        if "service" in clean_text or "work" in clean_text or "prof" in clean_text:
+                                            listing_types = ["service", "professional"]
+                                        elif "product" in clean_text or "item" in clean_text or "sale" in clean_text or "buy" in clean_text:
+                                            listing_types = ["product", "quick_sale"]
+                                        elif "job" in clean_text or "vacan" in clean_text or "employ" in clean_text:
+                                            listing_types = ["job", "quick_job"]
+                                        else:
+                                            listing_types = ["service", "product", "job"]
+
+                                    session["ad_draft"]["target_listing_types"] = listing_types
+
+                                    # 🟢 FIX: Transition to gender collection
                                     session["flow"] = "admin_ad_gender"
                                     commit_session(from_number, session)
 
                                     msg = (
-                                        f"🎯 **Categories Set:** {', '.join(categories)}\n\n"
-                                        f"👥 *Step 4: Target Gender*\n"
+                                        f"📋 *Listing Types Set:* {', '.join(listing_types)}\n\n"
+                                        f"👤 *Step 5: Target Gender*\n"
                                         f"Who should see this?\n"
                                         f"(Reply: 'Male', 'Female', or 'All')."
                                     )
                                     guarded_send(phone_number_id, from_number, msg, message_id)
                                     return
 
+
+
                                 # --- STEP 5: SAVE GENDER -> ASK REACH ---
                                 elif current_flow == "admin_ad_gender":
-                                    gender_input = text.strip().capitalize()
+                                    # Normalize common typed variations into your strict DB keys ('Male', 'Female', 'All')
+                                    raw_gender = (text or "").strip().lower()
+
+                                    if "fem" in raw_gender or raw_gender in ["w", "women", "female"]:
+                                        gender_input = "Female"
+                                    elif "mal" in raw_gender or raw_gender in ["m", "men", "male"]:
+                                        gender_input = "Male"
+                                    else:
+                                        gender_input = "All"
+
                                     session["ad_draft"]["target_gender"] = gender_input
+
                                     session["flow"] = "admin_ad_reach"
                                     commit_session(from_number, session)
 
@@ -5514,7 +5871,7 @@ def handle_whatsapp_logic(data):
                                         commit_session(from_number, session)
 
                                         msg = (
-                                            f"📈 **Reach Set:** {reach_limit} people.\n\n"
+                                            f"📈 *Reach Set:* {reach_limit} people.\n\n"
                                             f"🖼️ *Step 6: The Ad Content*\n"
                                             f"Send the **Text** message or upload the **Photo** now.\n"
                                             f"(If you send a photo, I will also save the caption)."
@@ -5533,7 +5890,11 @@ def handle_whatsapp_logic(data):
                                     if msg_type == "image":
                                         ad_draft["type"] = "image"
                                         ad_draft["media_id"] = message.get("image", {}).get("id")
-                                        ad_draft["body"] = message.get("image", {}).get("caption", "")
+                                        # Fallback to business name if caption string is blank
+                                        ad_draft["body"] = message.get("image", {}).get("caption",
+                                                                                        "").strip() or ad_draft.get(
+                                            "biz_name", "")
+
                                     else:
                                         ad_draft["type"] = "text"
                                         ad_draft["body"] = text
@@ -5565,7 +5926,7 @@ def handle_whatsapp_logic(data):
                                         loc_display = ", ".join(ad_draft.get("target_locations", ["Everywhere"]))
 
                                         report = (
-                                            f"🚀 **ADVERT IS NOW LIVE**\n"
+                                            f"🚀 *ADVERT IS NOW LIVE*\n"
                                             f"━━━━━━━━━━━━━━\n"
                                             f"🆔 ID: `{final_ad_id}`\n"
                                             f"🏢 Biz: {ad_draft.get('biz_name')}\n"
@@ -6829,22 +7190,38 @@ def handle_whatsapp_logic(data):
 
                                         # Compile structural data for writing to Firestore collections
                                         listing_doc = prepare_listing_data(session, lat, lng)
-                                        res_text = finalize_listing_to_db(from_number, listing_doc, session)
+                                        res_text, ad_to_show = finalize_listing_to_db(from_number, listing_doc, session)
 
                                         # 🎯 AD INJECTION: Show a relevant ad after successful listing
-                                        user_city = session.get("location") or session.get("city",
-                                                                                           "EVERYWHERE")  # Suburb first, city fallback
+                                        user_city = session.get("location") or session.get("city") or "EVERYWHERE"
                                         user_gender = session.get("gender", "All")
                                         user_cat = listing_doc.get("category", "ALL")
 
+                                        # 🟢 Define the context based on the action they just performed
+                                        listing_type = listing_doc.get("type", "service")
+
                                         ad_to_show = get_targeted_ad(
-                                            from_number,
-                                            user_city,
-                                            user_cat,
-                                            user_gender,
+                                            from_number=from_number,
+                                            user_city=user_city,
+                                            user_category=user_cat,
+                                            user_gender=user_gender,
                                             user_state=session.get("state"),
-                                            user_country=session.get("country")
+                                            user_country=session.get("country"),
+                                            user_lat=session.get("user_lat"),
+                                            user_lng=session.get("user_lng"),
+                                            smart_data={
+                                                "is_lister": True,
+                                                "listing_type": listing_type
+                                            }
                                         )
+
+                                        # Delivery & Tracking now happens cleanly inside deliver_ad()
+                                        if ad_to_show:
+                                            time.sleep(1)
+                                            lead_in = "💡 *While you're here, check this out:* "
+                                            guarded_send(phone_number_id, from_number, lead_in, message_id)
+                                            deliver_ad(phone_number_id, from_number, ad_to_show, message_id)
+                                            logger.info(f"📢 Ad injected after listing for {from_number}")
 
                                         # 5. --- SUCCESS UI/UX DISPLAY ---
                                         expiry_days = listing_doc.get("expiry_days", 7)
@@ -7142,10 +7519,9 @@ def handle_whatsapp_logic(data):
                                             flags=re.IGNORECASE
                                         )
 
-
-                                    # Remove leftover filler words
+                                    # Remove leftover filler words (Keep job/vacancy nouns for accurate keyword lookups)
                                     raw_query = re.sub(
-                                        r"\b(a|an|the|please|some|any|nearby|near me|closeby|close by|around me|around here|around|near|close|by|me|vacancy|vacancies|opening|openings)\b",
+                                        r"\b(a|an|the|please|some|any|nearby|near me|closeby|close by|around me|around here|around|near|close|by|me)\b",
                                         "",
                                         raw_query,
                                         flags=re.IGNORECASE
@@ -7179,6 +7555,16 @@ def handle_whatsapp_logic(data):
 
                                 # Final keyword extraction
                                 display_query = extract_keyword(display_query)
+
+                                # 🟢 GRAMMAR PATCH: Append context back for employment searches
+                                if (session.get("mode") == "EMPLOYMENT_SEARCH" or
+                                        session.get("route_intent") == "search_employment" or
+                                        session.get("predicted_intent") == "search_employment"):
+
+                                    # If the query doesn't already end with job/jobs, fix the grammar
+                                    if not display_query.lower().endswith("job") and not display_query.lower().endswith(
+                                            "jobs"):
+                                        display_query = f"{display_query} jobs"
 
                                 # Now continue to the rest of the code...
                                 clean_query = raw_query.strip() if raw_query else None
@@ -7288,6 +7674,23 @@ def handle_whatsapp_logic(data):
                                     logger.info(f"📍 DEBUG: Sending location request. loc_msg={loc_msg[:100]}")
                                     result = send_location_request(from_number, loc_msg)
                                     logger.info(f"📍 DEBUG: Location request response: {result}")
+
+                                    # 🟢 INJECT AD WHILE AWAITING LOCATION
+                                    user_gender = session.get("user_gender") or session.get("gender", "All")
+                                    int_category = "job" if (
+                                                mode == "EMPLOYMENT_SEARCH" or db_category == "job") else "product"
+
+                                    ad_loc_fallback = get_targeted_ad(
+                                        from_number=from_number, user_city="EVERYWHERE", user_category=int_category,
+                                        user_gender=user_gender, search_query=raw_query,
+                                        user_state=session.get("state"),
+                                        user_country=session.get("country"), user_lat=None, user_lng=None
+                                    )
+                                    if ad_loc_fallback:
+                                        time.sleep(1)
+                                        guarded_send(phone_number_id, from_number,
+                                                     "💡 *While I look that up, check this out:* ", message_id)
+                                        deliver_ad(phone_number_id, from_number, ad_loc_fallback, message_id)
                                     return
 
                                 # 🚀 3. EXECUTION PHASE (Modified for Professional Edit Path)
@@ -7496,12 +7899,15 @@ def handle_whatsapp_logic(data):
                                     guarded_send(phone_number_id, from_number, tip_text, message_id)
                                     logger.info(f"💡 Market Tip sent to {from_number}")
 
-                                # 🚀 3. PLAN B AD INJECTOR (Sync V1.5)
+                                # 🚀 3. PLAN B AD INJECTOR (Sync V1.5 - Resilient)
                                 # Display an ad even when results are empty
-                                user_city = session.get("city") or session.get(
-                                    "location") or "EVERYWHERE"  # City first, suburb fallback for broad ad targets
+                                user_city = session.get("city") or session.get("location") or "EVERYWHERE"
                                 user_gender = session.get("user_gender") or session.get("gender", "All")
-                                target_cat = targeting_meta.get("category", "all")
+
+                                if mode == "EMPLOYMENT_SEARCH" or current_category == "job" or db_category == "job":
+                                    target_cat = "job"
+                                else:
+                                    target_cat = targeting_meta.get("category", "all")
 
                                 ad_to_show = get_targeted_ad(
                                     from_number=from_number,
@@ -7510,15 +7916,25 @@ def handle_whatsapp_logic(data):
                                     user_gender=user_gender,
                                     search_query=raw_query,
                                     user_state=session.get("state"),
-                                    user_country=session.get("country")
+                                    user_country=session.get("country"),
+                                    user_lat=session.get("user_lat"),
+                                    user_lng=session.get("user_lng"),
+                                    smart_data={"is_lister": False}
                                 )
 
                                 if ad_to_show:
-                                    time.sleep(1)
-                                    lead_in = "💡 *While you're here, check this out:* "
-                                    guarded_send(phone_number_id, from_number, lead_in, message_id)
-                                    deliver_ad(phone_number_id, from_number, ad_to_show, message_id)
-                                    logger.info(f"📢 Ad injected for {from_number} | query={raw_query} | city={user_city}")
+                                    try:
+                                        time.sleep(1)
+                                        lead_in = "💡 *While you're here, check this out:* "
+                                        guarded_send(phone_number_id, from_number, lead_in, message_id)
+
+                                        # 🟢 All tracking and updates now happen automatically inside here
+                                        deliver_ad(phone_number_id, from_number, ad_to_show, message_id)
+
+                                        logger.info(
+                                            f"📢 Ad injected for {from_number} | query={raw_query} | city={user_city}")
+                                    except Exception as e:
+                                        logger.error(f"⚠️ Ad injection failed for {from_number}: {e}")
 
                                 # 🧹 4. SELECTIVE CLEANUP (Keep the state, only clear the transient flow)
                                 session.update({
