@@ -2199,7 +2199,7 @@ def finalize_listing_to_db(from_number, listing_doc, user_session):
         user_cat = listing_doc.get("category", "ALL")
 
         # 🟢 Capture the listing type for the ad engine
-        listing_type = listing_doc.get("listing_type", "service")
+        listing_type = listing_doc.get("listing_type") or listing_doc.get("type", "service")
 
         targeted_ad = get_targeted_ad(
             from_number=from_number,
@@ -5566,7 +5566,6 @@ def handle_whatsapp_logic(data):
 
                                     # 🟢 TRIGGER THE NATIVE PIN PICKER HERE
                                     send_location_request(from_number, "Tap below to select your target location pin.")
-
                                     return
 
 
@@ -7171,36 +7170,6 @@ def handle_whatsapp_logic(data):
                                         listing_doc = prepare_listing_data(session, lat, lng)
                                         res_text, ad_to_show = finalize_listing_to_db(from_number, listing_doc, session)
 
-                                        # 🎯 AD INJECTION: Show a relevant ad after successful listing
-                                        user_city = session.get("location") or session.get("city") or "EVERYWHERE"
-                                        user_gender = session.get("gender", "All")
-                                        user_cat = listing_doc.get("category", "ALL")
-
-                                        # 🟢 Define the context based on the action they just performed
-                                        listing_type = listing_doc.get("type", "service")
-
-                                        ad_to_show = get_targeted_ad(
-                                            from_number=from_number,
-                                            user_city=user_city,
-                                            user_category=user_cat,
-                                            user_gender=user_gender,
-                                            user_state=session.get("state"),
-                                            user_country=session.get("country"),
-                                            user_lat=session.get("user_lat"),
-                                            user_lng=session.get("user_lng"),
-                                            smart_data={
-                                                "is_lister": True,
-                                                "listing_type": listing_type
-                                            }
-                                        )
-
-                                        # Delivery & Tracking now happens cleanly inside deliver_ad()
-                                        if ad_to_show:
-                                            time.sleep(1)
-                                            lead_in = "💡 *While you're here, check this out:* "
-                                            guarded_send(phone_number_id, from_number, lead_in, message_id)
-                                            deliver_ad(phone_number_id, from_number, ad_to_show, message_id)
-                                            logger.info(f"📢 Ad injected after listing for {from_number}")
 
                                         # 5. --- SUCCESS UI/UX DISPLAY ---
                                         expiry_days = listing_doc.get("expiry_days", 7)
@@ -7660,17 +7629,23 @@ def handle_whatsapp_logic(data):
                                                 mode == "EMPLOYMENT_SEARCH" or db_category == "job") else "product"
 
                                     ad_loc_fallback = get_targeted_ad(
-                                        from_number=from_number, user_city="EVERYWHERE", user_category=int_category,
-                                        user_gender=user_gender, search_query=raw_query,
+                                        from_number=from_number,
+                                        user_city="EVERYWHERE",
+                                        user_category=int_category,
+                                        user_gender=user_gender,
+                                        search_query=raw_query,
                                         user_state=session.get("state"),
-                                        user_country=session.get("country"), user_lat=None, user_lng=None
+                                        user_country=session.get("country"),
+                                        user_lat=None,
+                                        user_lng=None,
+                                        smart_data={"is_lister": False}
                                     )
                                     if ad_loc_fallback:
                                         time.sleep(1)
                                         guarded_send(phone_number_id, from_number,
                                                      "💡 *While I look that up, check this out:* ", message_id)
                                         deliver_ad(phone_number_id, from_number, ad_loc_fallback, message_id)
-                                    return
+                                    return  # ← This return must be here
 
                                 # 🚀 3. EXECUTION PHASE (Modified for Professional Edit Path)
                                 user_lang = session.get("detected_lang", "English")
