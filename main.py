@@ -1957,22 +1957,12 @@ def get_targeted_ad(
         ]
 
         doc_id, ad = random.choices(matched_ads, weights=weights, k=1)[0]
-        chosen_index = [doc[0] for doc in matched_ads].index(doc_id)
-
-        # 📊 Update reach and seen_by safely
-        try:
-            db.collection("active_ads").document(doc_id).update({
-                "current_reach": firestore.Increment(1),
-                "seen_by": firestore.ArrayUnion([from_number])
-            })
-        except Exception as update_err:
-            logger.error(f"⚠️ Failed to update ad {doc_id}: {update_err}")
-
+        remaining = max(1, int(ad.get("budgeted_reach", 1)) - int(ad.get("current_reach", 0)))
         logger.info(
-            f"🎯 Ad selected: {ad.get('ad_id') or doc_id} | city={user_city} | query={search_query} | remaining_budget={weights[chosen_index]}"
+            f"🎯 Ad selected: {ad.get('ad_id') or doc_id} | city={user_city} | query={search_query} | remaining_budget={remaining}"
         )
 
-        return ad
+        return {"doc_id": doc_id, **ad}
 
     except Exception as e:
         logger.error(f"❌ Error fetching ad: {e}")
@@ -2098,7 +2088,7 @@ def deliver_ad(phone_number_id, from_number, ad_data, message_id):
     raw_content = ad_data.get("body") or ad_data.get("content") or ""
     media_id = ad_data.get("media_id") or ad_data.get("image_id")
     ad_type = ad_data.get("type", "text")
-    ad_id = ad_data.get("ad_id") # We need this for the DB update
+    ad_id = ad_data.get("doc_id") or ad_data.get("ad_id")  # ✅ doc_id first, ad_id as fallback
 
     # 🏷️ THE SPONSORED LABEL
     sponsored_label = "✨ *Featured* | "
@@ -2111,15 +2101,14 @@ def deliver_ad(phone_number_id, from_number, ad_data, message_id):
         else:
             guarded_send(phone_number_id, from_number, final_content, message_id)
 
-        # 2. 📈 THE REACH INCREMENTER (NEW)
+        # 2. 📈 UPDATE REACH (Only here — not in get_targeted_ad)
         if ad_id:
-            # We use an 'Atomic Increment' so the count is 100% accurate
             ad_ref = db.collection("active_ads").document(ad_id)
             ad_ref.update({
                 "current_reach": firestore.Increment(1),
-                "seen_by": firestore.ArrayUnion([from_number]) # Prevents spamming the same user
+                "seen_by": firestore.ArrayUnion([from_number])
             })
-            logger.info(f"📢 Ad {ad_id} Delivered & Reach Incremented for {from_number}")
+            logger.info(f"📢 Ad {ad_id} delivered & reach updated for {from_number}")
 
     except Exception as e:
         logger.error(f"❌ Failed to deliver or track ad {ad_id}: {e}")
