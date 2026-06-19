@@ -4660,63 +4660,53 @@ def handle_whatsapp_logic(data):
                             guarded_send(phone_number_id, from_number, msg, message_id)
                             return
 
-
                         # --- 🛑 MASTER TRAFFIC CONTROLLER ---
                         if msg_type == "location":
-                            logger.info(f"📍 Location pin received. Routing flow: {session.get('flow')}")
-
-                            loc_data = message.get("location", {})
-                            lat = loc_data.get("latitude")
-                            lng = loc_data.get("longitude")
-
                             session = get_session(from_number) or {}
-                            current_flow = session.get("flow")
+                            current_flow = session.get("flow", "")
 
-                            # --- PATH A: SEARCH FLOW ---
-                            if current_flow == "awaiting_search_location":
-                                session.update({
-                                    "user_lat": lat,
-                                    "user_lng": lng,
-                                    "flow": "searching",
-                                    "search_executing": False  # 🧹 Clear any stale lock
-                                })
-                                commit_session(from_number, session)
-                                logger.info("✅ Search coordinates cached. Falling through to Section 8.")
-                                # NO RETURN
+                            # 🟢 NEW: Hijack for Admin Ad Flow
+                            if current_flow.startswith("admin_ad_"):
+                                logger.info(f"📍 Admin location detected. Bypassing Controller for flow: {current_flow}")
+                                # DO NOT RETURN. Let the code fall through to your specific Admin handlers.
 
-                            # --- PATH B: ONBOARDING FLOW ---
-                            elif current_flow == "awaiting_offer_location":
-                                # Section 7 owns the geocoding for this path
-                                session.update({
-                                    "lat": lat,
-                                    "lng": lng,
-                                    "user_lat": lat,
-                                    "user_lng": lng
-                                })
-                                commit_session(from_number, session)
-                                logger.info("✅ Onboarding coordinates cached. Falling through to Section 7.")
-                                # NO RETURN
-
-                            # --- PATH C: DEFAULT / RANDOM PIN ---
+                            # 🔴 Existing Logic: Only process if NOT in an Admin flow
                             else:
-                                # No downstream section owns this, so resolve city here
-                                geo_refresh = extract_global_location(lat=lat, lng=lng, from_number=from_number)
-                                refreshed_city = geo_refresh.get("town") or geo_refresh.get("name") or "nearby"
+                                logger.info(f"📍 Location pin received. Routing flow: {current_flow}")
+                                loc_data = message.get("location", {})
+                                lat = loc_data.get("latitude")
+                                lng = loc_data.get("longitude")
 
-                                session.update({
-                                    "user_lat": lat,
-                                    "user_lng": lng,
-                                    "location": geo_refresh.get("town") or refreshed_city,
-                                    "city": geo_refresh.get("city"),
-                                    "state": geo_refresh.get("state"),
-                                    "country": geo_refresh.get("country")
-                                })
-                                commit_session(from_number, session)
+                                # --- PATH A: SEARCH FLOW ---
+                                if current_flow == "awaiting_search_location":
+                                    session.update({
+                                        "user_lat": lat, "user_lng": lng, "flow": "searching", "search_executing": False
+                                    })
+                                    commit_session(from_number, session)
+                                    # Falling through to Section 8
 
-                                guarded_send(phone_number_id, from_number,
-                                             f"📍 I've updated your location to *{refreshed_city}*! What would you like to find? ",
-                                             message_id)
-                                return
+                                # --- PATH B: ONBOARDING FLOW ---
+                                elif current_flow == "awaiting_offer_location":
+                                    session.update({"lat": lat, "lng": lng, "user_lat": lat, "user_lng": lng})
+                                    commit_session(from_number, session)
+                                    # Falling through to Section 7
+
+                                # --- PATH C: DEFAULT / RANDOM PIN ---
+                                else:
+                                    geo_refresh = extract_global_location(lat=lat, lng=lng, from_number=from_number)
+                                    refreshed_city = geo_refresh.get("town") or geo_refresh.get("name") or "nearby"
+                                    session.update({
+                                        "user_lat": lat, "user_lng": lng,
+                                        "location": geo_refresh.get("town") or refreshed_city,
+                                        "city": geo_refresh.get("city"),
+                                        "state": geo_refresh.get("state"),
+                                        "country": geo_refresh.get("country")
+                                    })
+                                    commit_session(from_number, session)
+                                    guarded_send(phone_number_id, from_number,
+                                                 f"📍 I've updated your location to *{refreshed_city}*! What would you like to find? ",
+                                                 message_id)
+                                    return  # Block others from executing
 
                         # --- 🛑 1.2 SAFETY GATE ---
                         # 🛡️ Profanity Check (Only for text messages)
@@ -5448,35 +5438,20 @@ def handle_whatsapp_logic(data):
                                 guarded_send(phone_number_id, from_number, help_text, message_id)
                                 return
 
-
-                            # A. RESET LOGIC (Soft Reset)
+                            # --- A. RESET LOGIC (Hard Reset) ---
                             if text_lower in ["reset", "clear", "cancel", "stop", "none"]:
-                                # 🟢 Update the session instead of deleting it
-                                session.update({
-                                    "flow": None,
-                                    "pending_search": None,
-                                    "pending_cat": None,
-                                    "location_requested": False,
-                                    "query_item": None,
-                                    "biz_name": None,
-                                    "biz_phone": None
-                                })
-                                commit_session(from_number, session)
+                                # 🔴 Wipe the session clean
+                                # We initialize with a timestamp so commit_session registers it
+                                session = {"updated_at": datetime.utcnow()}
+
+                                # IMPORTANT: Ensure your save_session function OVERWRITES the existing entry.
+                                # If save_session uses a database 'UPDATE', you may need a delete_session() function.
+                                save_session(from_number, session)
 
                                 reset_msg = (
-                                    "🔄 Reset successful. What can I find for you now?\n\n"
-                                    "🆘 *Quick Help*\n"
-                                    "• Type *help* for all commands\n"
-                                    "• Type *manage listings* to manage posts\n"
-                                    "• Type *status YOUR_ID* to check views"
+                                    "🔄 Reset successful. Everything cleared. What can I find for you now?"
                                 )
-
-                                guarded_send(
-                                    phone_number_id,
-                                    from_number,
-                                    reset_msg,
-                                    message_id
-                                )
+                                guarded_send(phone_number_id, from_number, reset_msg, message_id)
                                 return
 
                             # B. DELETE LISTING (OPT-OUT / MANAGEMENT)
