@@ -4257,7 +4257,9 @@ def prepare_listing_data(session, lat, lng):
 def commit_session(from_number, session):
     """Ensures every session save has a UTC timestamp for debugging."""
     if session:
-        session["updated_at"] = datetime.utcnow()
+        # ✅ Changed from datetime.utcnow() to timezone-aware ISO string
+        # Fixes DeprecationWarning and enables Firestore range queries
+        session["updated_at"] = datetime.now(timezone.utc).isoformat()
         save_session(from_number, session)
 
 
@@ -4591,6 +4593,46 @@ def send_help_button(phone_number_id, to):
 
     except Exception as e:
         logger.error(f"Help button failed: {e}")
+
+
+def get_usage_stats(start_dt, end_dt):
+    """
+    Queries Firestore sessions and aggregates usage stats for a date range.
+    Uses server-side filtering for efficiency.
+    """
+    # ✅ Server-side filter — only fetches documents in the date range
+    # Requires Firestore composite index on updated_at
+    sessions_ref = (
+        db.collection("sessions")
+        .where("updated_at", ">=", start_dt.isoformat())
+        .where("updated_at", "<=", end_dt.isoformat())
+        .stream()
+    )
+
+    # ✅ Initialize counters
+    stats = {"total": 0, "male": 0, "female": 0, "searchers": 0, "listers": 0}
+
+    for doc in sessions_ref:
+        data = doc.to_dict()
+
+        # ✅ Count unique user
+        stats["total"] += 1
+
+        # ✅ Gender breakdown
+        gender = str(data.get("user_gender") or data.get("gender") or "").capitalize()
+        if gender == "Male":
+            stats["male"] += 1
+        elif gender == "Female":
+            stats["female"] += 1
+
+        # ✅ Intent breakdown
+        intent = data.get("predicted_intent")
+        if intent in ["search", "search_employment"]:
+            stats["searchers"] += 1
+        elif intent in ["offer", "quick_sell", "provider_onboarding", "recruiter_onboarding"]:
+            stats["listers"] += 1
+
+    return stats
 
 
 def handle_whatsapp_logic(data):
@@ -5382,6 +5424,65 @@ def handle_whatsapp_logic(data):
                                         message_id
                                     )
 
+                                return
+
+                            # --- 📊 STATS COMMAND (Admin Only) ---
+                            if text_lower.startswith("stats "):
+
+                                # ✅ Restrict to admin only
+                                if from_number not in [os.getenv("ADMIN_PHONE")]:
+                                    guarded_send(phone_number_id, from_number, "❌ Unauthorized.", message_id)
+                                    return
+
+                                try:
+                                    # ✅ Parse date parts from command
+                                    parts = text_lower.replace("stats ", "").strip().split()
+
+                                    if len(parts) == 1:
+                                        # ✅ Single date — stats for that day only
+                                        start_dt = datetime.fromisoformat(parts[0]).replace(tzinfo=timezone.utc)
+                                        end_dt = start_dt.replace(hour=23, minute=59, second=59)
+
+                                    elif len(parts) == 2:
+                                        # ✅ Date range — stats between two dates
+                                        start_dt = datetime.fromisoformat(parts[0]).replace(tzinfo=timezone.utc)
+                                        end_dt = datetime.fromisoformat(parts[1]).replace(
+                                            hour=23, minute=59, second=59, tzinfo=timezone.utc
+                                        )
+                                    else:
+                                        raise ValueError("Invalid format")
+
+                                    # ✅ Get aggregated stats from helper function
+                                    data = get_usage_stats(start_dt, end_dt)
+                                    total = data["total"]
+
+                                    # ✅ Build report
+                                    report = (
+                                        f"📊 *4ound Usage Report*\n"
+                                        f"━━━━━━━━━━━━━━\n"
+                                        f"📅 *Period:* {start_dt.strftime('%d %b %Y')} → {end_dt.strftime('%d %b %Y')}\n\n"
+                                        f"👥 *Total Users:* {total}\n"
+                                        f"👨 *Male:* {data['male']}\n"
+                                        f"👩 *Female:* {data['female']}\n\n"
+                                        f"🔍 *Searchers:* {data['searchers']}\n"
+                                        f"📋 *Listers:* {data['listers']}\n"
+                                        f"━━━━━━━━━━━━━━\n"
+                                        # ✅ Guard against division by zero
+                                        f"📈 *Male %:* {round(data['male'] / total * 100, 1) if total else 0}%\n"
+                                        f"📈 *Female %:* {round(data['female'] / total * 100, 1) if total else 0}%"
+                                    )
+
+                                    guarded_send(phone_number_id, from_number, report, message_id)
+
+                                except Exception as e:
+                                    # ✅ Catch bad date format and all other errors
+                                    logger.error(f"Stats error: {e}")
+                                    guarded_send(
+                                        phone_number_id, from_number,
+                                        "❌ Use: *stats YYYY-MM-DD* or *stats YYYY-MM-DD YYYY-MM-DD*\n"
+                                        "Example: stats 2026-06-01 2026-06-30",
+                                        message_id
+                                    )
                                 return
 
 
