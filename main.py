@@ -4602,10 +4602,11 @@ def get_usage_stats(start_dt, end_dt):
     """
     # ✅ Server-side filter — only fetches documents in the date range
     # Requires Firestore composite index on updated_at
+    # ✅ New — keyword argument using FieldFilter
     sessions_ref = (
         db.collection("sessions")
-        .where("updated_at", ">=", start_dt.isoformat())
-        .where("updated_at", "<=", end_dt.isoformat())
+        .where(filter=FieldFilter("updated_at", ">=", start_dt.isoformat()))
+        .where(filter=FieldFilter("updated_at", "<=", end_dt.isoformat()))
         .stream()
     )
 
