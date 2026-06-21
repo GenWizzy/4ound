@@ -4608,14 +4608,27 @@ def get_usage_stats(start_dt, end_dt):
 
     stats = {
         "total": 0,
+
         "male": 0,
         "female": 0,
-        "searchers": 0,
-        "listers": 0
+
+        "market_searches": 0,
+        "job_searches": 0,
+        "total_searches": 0,
+        "unique_searchers": 0,
+
+        "total_listings": 0,
+        "unique_listers": 0
     }
 
+    unique_searchers = set()
+    unique_listers = set()
+
     try:
-        # 1. SEARCH LOGS
+
+        # ==================================================
+        # 1. SEARCH LOGS (MARKET SEARCHES)
+        # ==================================================
         search_ref = (
             db.collection("search_logs")
             .where(filter=FieldFilter("timestamp", ">=", start_dt))
@@ -4626,8 +4639,13 @@ def get_usage_stats(start_dt, end_dt):
         for doc in search_ref:
             data = doc.to_dict() or {}
 
-            stats["searchers"] += 1
+            stats["market_searches"] += 1
+            stats["total_searches"] += 1
             stats["total"] += 1
+
+            phone = str(data.get("from_number", "")).strip()
+            if phone:
+                unique_searchers.add(phone)
 
             gender = str(data.get("gender", "")).capitalize()
 
@@ -4636,7 +4654,9 @@ def get_usage_stats(start_dt, end_dt):
             elif gender == "Female":
                 stats["female"] += 1
 
+        # ==================================================
         # 2. JOB SEARCH LOGS
+        # ==================================================
         job_ref = (
             db.collection("job_search_logs")
             .where(filter=FieldFilter("timestamp", ">=", start_dt))
@@ -4644,11 +4664,20 @@ def get_usage_stats(start_dt, end_dt):
             .stream()
         )
 
-        for _ in job_ref:
-            stats["searchers"] += 1
+        for doc in job_ref:
+            data = doc.to_dict() or {}
+
+            stats["job_searches"] += 1
+            stats["total_searches"] += 1
             stats["total"] += 1
 
+            phone = str(data.get("from_number", "")).strip()
+            if phone:
+                unique_searchers.add(phone)
+
+        # ==================================================
         # 3. LISTINGS
+        # ==================================================
         listing_ref = (
             db.collection("listings")
             .where(filter=FieldFilter("created_at", ">=", start_dt))
@@ -4656,9 +4685,26 @@ def get_usage_stats(start_dt, end_dt):
             .stream()
         )
 
-        for _ in listing_ref:
-            stats["listers"] += 1
+        for doc in listing_ref:
+            data = doc.to_dict() or {}
+
+            stats["total_listings"] += 1
             stats["total"] += 1
+
+            phone = (
+                data.get("owner_phone")
+                or data.get("user_id")
+                or data.get("contact_phone")
+            )
+
+            if phone:
+                unique_listers.add(str(phone).strip())
+
+        # ==================================================
+        # FINAL UNIQUE COUNTS
+        # ==================================================
+        stats["unique_searchers"] = len(unique_searchers)
+        stats["unique_listers"] = len(unique_listers)
 
     except Exception as e:
         logger.error(f"Error getting usage stats: {e}")
