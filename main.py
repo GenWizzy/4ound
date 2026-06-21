@@ -33,6 +33,7 @@ from google.api_core import retry as g_retry, exceptions
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 from google.oauth2 import service_account
+from google.cloud.firestore import FieldFilter, Timestamp
 
 # Scheduler
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -2157,7 +2158,8 @@ def finalize_listing_to_db(from_number, listing_doc, user_session):
             "owner_phone": from_number,
             "user_id": from_number,
             "contact_phone": contact_phone,
-            "created_at": user_session.get("created_at") or firestore.SERVER_TIMESTAMP,
+            # ✅ FIX: Force the server to generate a real timestamp
+            "created_at": firestore.SERVER_TIMESTAMP,
             "is_active": True,
             "is_verified": not needs_review,
             "verification_status": "pending" if needs_review else "approved",
@@ -4594,19 +4596,21 @@ def send_help_button(phone_number_id, to):
     except Exception as e:
         logger.error(f"Help button failed: {e}")
 
+
 def get_usage_stats(start_dt, end_dt):
     """
-    Aggregates stats from actual event-based collections.
+    Aggregates stats using Firestore Timestamp objects for accurate filtering.
     """
+    # 1. Convert Python datetimes to Firestore Timestamps
+    start_ts = Timestamp.from_datetime(start_dt)
+    end_ts = Timestamp.from_datetime(end_dt)
+
     stats = {"total": 0, "male": 0, "female": 0, "searchers": 0, "listers": 0}
 
-    start_iso = start_dt.isoformat()
-    end_iso = end_dt.isoformat()
-
-    # 1. Query: search_logs (General Searchers + Demographics)
+    # 2. Query: search_logs
     search_ref = db.collection("search_logs") \
-        .where(filter=FieldFilter("timestamp", ">=", start_iso)) \
-        .where(filter=FieldFilter("timestamp", "<=", end_iso)).stream()
+        .where(filter=FieldFilter("timestamp", ">=", start_ts)) \
+        .where(filter=FieldFilter("timestamp", "<=", end_ts)).stream()
 
     for doc in search_ref:
         data = doc.to_dict()
@@ -4618,19 +4622,19 @@ def get_usage_stats(start_dt, end_dt):
         elif gender == "Female":
             stats["female"] += 1
 
-    # 2. Query: job_search_logs (Job Searchers)
+    # 3. Query: job_search_logs
     job_ref = db.collection("job_search_logs") \
-        .where(filter=FieldFilter("timestamp", ">=", start_iso)) \
-        .where(filter=FieldFilter("timestamp", "<=", end_iso)).stream()
+        .where(filter=FieldFilter("timestamp", ">=", start_ts)) \
+        .where(filter=FieldFilter("timestamp", "<=", end_ts)).stream()
 
     for doc in job_ref:
         stats["searchers"] += 1
         stats["total"] += 1
 
-    # 3. Query: listings (Listers)
+    # 4. Query: listings (Requires 'created_at' to be a Firestore Timestamp)
     listing_ref = db.collection("listings") \
-        .where(filter=FieldFilter("created_at", ">=", start_iso)) \
-        .where(filter=FieldFilter("created_at", "<=", end_iso)).stream()
+        .where(filter=FieldFilter("created_at", ">=", start_ts)) \
+        .where(filter=FieldFilter("created_at", "<=", end_ts)).stream()
 
     for doc in listing_ref:
         stats["listers"] += 1
