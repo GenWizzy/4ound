@@ -5534,16 +5534,22 @@ def handle_whatsapp_logic(data):
                                     data = get_usage_stats(start_dt, end_dt)
                                     total = data["total"]
 
-                                    # ✅ Build report
                                     report = (
                                         f"📊 *4ound Usage Report*\n"
                                         f"━━━━━━━━━━━━━━\n"
                                         f"📅 *Period:* {start_dt.strftime('%d %b %Y')} → {end_dt.strftime('%d %b %Y')}\n\n"
-                                        f"👥 *Total Users:* {total}\n"
+                                        # ✅ Gender breakdown from search logs
+                                        f"👥 *Total Activity:* {total}\n"
                                         f"👨 *Male:* {data['male']}\n"
                                         f"👩 *Female:* {data['female']}\n\n"
-                                        f"🔍 *Searchers:* {data['searchers']}\n"
-                                        f"📋 *Listers:* {data['listers']}\n"
+                                        # ✅ Search breakdown
+                                        f"🔍 *Total Searches:* {data['total_searches']}\n"
+                                        f"🛒 *Market Searches:* {data['market_searches']}\n"
+                                        f"💼 *Job Searches:* {data['job_searches']}\n"
+                                        f"👤 *Unique Searchers:* {data['unique_searchers']}\n\n"
+                                        # ✅ Listing breakdown
+                                        f"📋 *Total Listings:* {data['total_listings']}\n"
+                                        f"👤 *Unique Listers:* {data['unique_listers']}\n"
                                         f"━━━━━━━━━━━━━━\n"
                                         # ✅ Guard against division by zero
                                         f"📈 *Male %:* {round(data['male'] / total * 100, 1) if total else 0}%\n"
