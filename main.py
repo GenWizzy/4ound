@@ -4594,44 +4594,47 @@ def send_help_button(phone_number_id, to):
     except Exception as e:
         logger.error(f"Help button failed: {e}")
 
-
 def get_usage_stats(start_dt, end_dt):
     """
-    Queries Firestore sessions and aggregates usage stats for a date range.
-    Uses server-side filtering for efficiency.
+    Aggregates stats from actual event-based collections.
     """
-    # ✅ Server-side filter — only fetches documents in the date range
-    # Requires Firestore composite index on updated_at
-    # ✅ New — keyword argument using FieldFilter
-    sessions_ref = (
-        db.collection("sessions")
-        .where(filter=FieldFilter("updated_at", ">=", start_dt.isoformat()))
-        .where(filter=FieldFilter("updated_at", "<=", end_dt.isoformat()))
-        .stream()
-    )
-
-    # ✅ Initialize counters
     stats = {"total": 0, "male": 0, "female": 0, "searchers": 0, "listers": 0}
 
-    for doc in sessions_ref:
+    start_iso = start_dt.isoformat()
+    end_iso = end_dt.isoformat()
+
+    # 1. Query: search_logs (General Searchers + Demographics)
+    search_ref = db.collection("search_logs") \
+        .where(filter=FieldFilter("timestamp", ">=", start_iso)) \
+        .where(filter=FieldFilter("timestamp", "<=", end_iso)).stream()
+
+    for doc in search_ref:
         data = doc.to_dict()
-
-        # ✅ Count unique user
+        stats["searchers"] += 1
         stats["total"] += 1
-
-        # ✅ Gender breakdown
-        gender = str(data.get("user_gender") or data.get("gender") or "").capitalize()
+        gender = str(data.get("gender") or "").capitalize()
         if gender == "Male":
             stats["male"] += 1
         elif gender == "Female":
             stats["female"] += 1
 
-        # ✅ Intent breakdown
-        intent = data.get("predicted_intent")
-        if intent in ["search", "search_employment"]:
-            stats["searchers"] += 1
-        elif intent in ["offer", "quick_sell", "provider_onboarding", "recruiter_onboarding"]:
-            stats["listers"] += 1
+    # 2. Query: job_search_logs (Job Searchers)
+    job_ref = db.collection("job_search_logs") \
+        .where(filter=FieldFilter("timestamp", ">=", start_iso)) \
+        .where(filter=FieldFilter("timestamp", "<=", end_iso)).stream()
+
+    for doc in job_ref:
+        stats["searchers"] += 1
+        stats["total"] += 1
+
+    # 3. Query: listings (Listers)
+    listing_ref = db.collection("listings") \
+        .where(filter=FieldFilter("created_at", ">=", start_iso)) \
+        .where(filter=FieldFilter("created_at", "<=", end_iso)).stream()
+
+    for doc in listing_ref:
+        stats["listers"] += 1
+        stats["total"] += 1
 
     return stats
 
@@ -7826,9 +7829,6 @@ def handle_whatsapp_logic(data):
                                 logger.info(
                                     f"🔍 DEBUG: Mode sync. mode={mode} | is_new_search={is_new_search} | is_continuation={is_continuation} | current_category={current_category}")
 
-
-
-
                                 # 🆕 STEP 3: ROUTING
                                 if mode == "EMPLOYMENT_SEARCH":
                                     logger.info(f"🕵️ Internal Job Search: {raw_query} (Offset: {current_offset})")
@@ -7849,8 +7849,23 @@ def handle_whatsapp_logic(data):
                                         results = job_response or []
                                         total_job_count = len(results)
 
+                                    # 🟢 LOG THE JOB SEARCH HERE
+                                    # This ensures it shows up in your 'job_search_logs' for the stats command
+                                    try:
+                                        db.collection("job_search_logs").add({
+                                            "from_number": from_number,
+                                            "query": raw_query,
+                                            "gender": session.get("user_gender") or "Unknown",
+                                            "timestamp": firestore.SERVER_TIMESTAMP,
+                                            "city": session.get("city") or "Unknown"
+                                        })
+                                        logger.info(f"✅ Job search logged for {from_number}")
+                                    except Exception as e:
+                                        logger.error(f"❌ Failed to log job search: {e}")
+
                                     targeting_meta = {"category": "job", "source": "internal",
                                                       "total_count": total_job_count}
+
                                 else:
                                     # 🛒 MARKET SEARCH (Hybrid Path)
                                     # Ensure smart_payload includes the offset as we discussed
