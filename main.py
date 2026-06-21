@@ -33,7 +33,6 @@ from google.api_core import retry as g_retry, exceptions
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 from google.oauth2 import service_account
-from google.cloud.firestore import FieldFilter, Timestamp
 
 # Scheduler
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -4602,8 +4601,8 @@ def get_usage_stats(start_dt, end_dt):
     Aggregates stats using Firestore Timestamp objects for accurate filtering.
     """
     # 1. Convert Python datetimes to Firestore Timestamps
-    start_ts = Timestamp.from_datetime(start_dt)
-    end_ts = Timestamp.from_datetime(end_dt)
+    start_ts = firestore.Timestamp.from_datetime(start_dt)
+    end_ts = firestore.Timestamp.from_datetime(end_dt)
 
     stats = {"total": 0, "male": 0, "female": 0, "searchers": 0, "listers": 0}
 
