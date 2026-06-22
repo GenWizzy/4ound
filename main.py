@@ -1549,7 +1549,7 @@ def clear_session(whatsapp_number):
             "recent_message_ids": data.get("recent_message_ids", []),
             "sent_message_id": data.get("sent_message_id"),
 
-            "updated_at": time.time(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),  # ✅ not time.time()
 
             # Reset flow safely
             "flow": None
@@ -5625,14 +5625,7 @@ def handle_whatsapp_logic(data):
 
                             # --- A. RESET LOGIC (Hard Reset) ---
                             if text_lower in ["reset", "clear", "cancel", "stop", "none"]:
-                                # 🔴 Wipe the session clean
-                                # We initialize with a timestamp so commit_session registers it
-                                session = {"updated_at": datetime.utcnow()}
-
-                                # IMPORTANT: Ensure your save_session function OVERWRITES the existing entry.
-                                # If save_session uses a database 'UPDATE', you may need a delete_session() function.
-                                save_session(from_number, session)
-
+                                clear_session(from_number)  # ✅ Properly wipes flow fields, preserves identity
                                 reset_msg = (
                                     "🔄 Reset successful. Everything cleared. What can I find for you now?"
                                 )
