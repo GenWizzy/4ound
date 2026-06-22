@@ -7045,10 +7045,14 @@ def handle_whatsapp_logic(data):
                                     commit_session(from_number, session)
 
                                     # Finally, ask for phone
-                                    raw_phone_prompt = get_local_response(prompt_namespace, None, language=detected_lang,
+                                    raw_phone_prompt = get_local_response(prompt_namespace, None,
+                                                                          language=detected_lang,
                                                                           sub_key="ask_phone")
                                     prompt = random.choice(raw_phone_prompt) if isinstance(raw_phone_prompt,
                                                                                            list) else raw_phone_prompt
+
+                                    # ✅ Replace {price} placeholder with actual formatted price
+                                    prompt = prompt.replace("{price}", formatted_val)
 
                                     guarded_send(phone_number_id, from_number, prompt, message_id)
                                     guarded_response_sent = True
