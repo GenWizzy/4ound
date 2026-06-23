@@ -90,9 +90,9 @@
   "Let's get your {item} service listed so locals can find you!\n\n_(Type *reset* if you need to start fresh)_"
 ],
   "ask_details": [
-  "Tell us more about your *{item}* service. Include keywords customers might search for! 🛠️\n\n_(Example: 'I fix leaking pipes, blocked drains, bathroom installation in Abuja')_",
-  "Describe your *{item}* service in detail. The more keywords you use, the easier customers find you! 📝\n\n_(Example: 'Professional electrician, wiring, repairs, generator installation, Lagos')_",
-  "What should customers know about your *{item}* service? Be specific — keywords help people find you! 🔍\n\n_(Example: 'Expert tailor for native wear, suits, gowns — fast delivery in Wuse')_"
+  "Tell us more about your *{item}* service. Include keywords customers might search for!",
+  "Describe your *{item}* service in detail. The more keywords you use, the easier customers find you!",
+  "What should customers know about your *{item}* service? Be specific — keywords help people find you!"
 ],
   "start_generic": [
   "Ready to put your business on the map? I just need a few details.",

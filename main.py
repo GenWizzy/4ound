@@ -1422,6 +1422,11 @@ def search_offers_firestore(query, user_lat=None, user_lng=None, top_k=5,
         combined_text = f"{c.get('provider_name', '').lower()} {c.get('description', '').lower()}"
         keyword_overlap = [w for w in query_words if re.search(r'\b' + re.escape(w) + r'\b', combined_text)]
 
+        # 🛡️ Profession/service guard
+        if entry_type not in ["product", "quick_sale"] and query_words and not keyword_overlap:
+            logger.info(f"🚫 Rejected (No keyword match): {c.get('provider_name')}")
+            continue
+
         # Soft relevance boost
         if keyword_overlap:
             boost = 0.45 if entry_type == "quick_job" else 0.15
