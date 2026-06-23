@@ -1768,9 +1768,36 @@ def extract_global_location(text=None, from_number=None, context_country=None, l
                     return result
 
 
+
         except Exception as e:
+
             logger.error(f"Reverse geocoding error for coordinates ({lat}, {lng}): {e}")
-        return {"found": False}
+
+            return {
+
+                "found": True,
+
+                "lat": lat,
+
+                "lng": lng,
+
+                "town": None,
+
+                "city": None,
+
+                "state": None,
+
+                "country": None,
+
+                "country_code": None,
+
+                "name": None,
+
+                "display_name": "Location unavailable",
+
+                "service": None
+
+            }
 
     # 📝 PATH 2: Text-Based Logic (Forward Geocoding)
     if text:
@@ -4157,7 +4184,7 @@ def get_market_insight(user_city="GLOBAL"):
 
     except Exception as e:
         logger.error(f"Insight Error: {e}")
-        return CACHED_MARKET_TIP.get(target_city) or "💡 *Tip:* The more people search, the smarter 4ound becomes. 🚀"
+        return CACHED_MARKET_TIP.get(target_city) or " *Tip:* The more people search, the smarter 4ound becomes. 🚀"
 
 
 def prepare_listing_data(session, lat, lng):
@@ -7354,7 +7381,12 @@ def handle_whatsapp_logic(data):
 
 
                                         # 5. --- SUCCESS UI/UX DISPLAY ---
-                                        expiry_days = listing_doc.get("expiry_days", 7)
+                                        expiry_days = listing_doc.get("expiry_days")
+
+                                        if expiry_days is None:
+                                            expiry_text = "This listing does not expire."
+                                        else:
+                                            expiry_text = f"This listing will expire in {expiry_days} days."
                                         success_raw = get_local_response(prompt_namespace, None, language=detected_lang,
                                                                          sub_key="success_msg")
                                         success_prefix = random.choice(success_raw) if isinstance(success_raw,
@@ -7369,7 +7401,7 @@ def handle_whatsapp_logic(data):
                                         final_msg = (
                                             f"✅ *{success_prefix}*\n"
                                             f"{res_text}{privacy_note}\n\n"
-                                            f"⏱️ *Note:* This listing will expire in {expiry_days} days.\n"
+                                            f"⏱️ *Note:* {expiry_text}\n"
                                             f"{'-' * 15}\n"
                                             f"💡 {market_tip}"
                                         )
