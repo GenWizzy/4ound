@@ -5582,10 +5582,7 @@ def handle_whatsapp_logic(data):
                                         # ✅ Listing breakdown
                                         f"📋 *Total Listings:* {data['total_listings']}\n"
                                         f"👤 *Unique Listers:* {data['unique_listers']}\n"
-                                        f"━━━━━━━━━━━━━━\n"
-                                        # ✅ Guard against division by zero
-                                        f"📈 *Male %:* {round(data['male'] / total * 100, 1) if total else 0}%\n"
-                                        f"📈 *Female %:* {round(data['female'] / total * 100, 1) if total else 0}%"
+                                        f"━━━━━━━━━━━━━━"
                                     )
 
                                     guarded_send(phone_number_id, from_number, report, message_id)
@@ -7052,7 +7049,8 @@ def handle_whatsapp_logic(data):
 
                                     if not selection_id:
                                         guarded_send(phone_number_id, from_number,
-                                                     "Please select one of the options below. 👇")
+                                                     "Please select one of the options below to continue. 👇",
+                                                     message_id)  # ✅ Add message_id
                                         return
 
 
