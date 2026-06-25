@@ -16,6 +16,7 @@ from datetime import datetime, timedelta, timezone
 from collections import deque
 from typing import Union, Dict, List
 from math import radians, sin, cos, sqrt, atan2
+import base64
 
 # Flask & External Services
 from flask import Flask, request, jsonify
@@ -62,12 +63,16 @@ META_TEST_NUMBER = os.getenv("META_TEST_NUMBER", "+15551903534")
 FOURSQUARE_SERVICE_KEY = os.getenv("FOURSQUARE_SERVICE_KEY")
 WHATSAPP_TOKEN = ACCESS_TOKEN
 PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID") # You still need this one!
-# Make sure GOOGLE_APPLICATION_CREDENTIALS is set to 4oundkey.json
-# Do NOT need FIREBASE_PROJECT if using service account
-# --- Replace your old single line with this block ---
-# --- Replace your current initialization block with this ---
+# --- Updated Initialization Block ---
 if os.getenv('GOOGLE_APPLICATION_CREDENTIALS_JSON'):
-    key_dict = json.loads(os.getenv('GOOGLE_APPLICATION_CREDENTIALS_JSON'))
+    # 1. Get the base64 string
+    encoded_creds = os.getenv('GOOGLE_APPLICATION_CREDENTIALS_JSON')
+
+    # 2. Decode it from base64 back into raw JSON string
+    decoded_json = base64.b64decode(encoded_creds)
+
+    # 3. Parse the JSON
+    key_dict = json.loads(decoded_json)
 
     # Force the project ID from the JSON
     project_id = key_dict.get('project_id')
@@ -80,7 +85,7 @@ if os.getenv('GOOGLE_APPLICATION_CREDENTIALS_JSON'):
     # Pass the project explicitly
     db = firestore.Client(credentials=creds, project=project_id)
 else:
-    # Fallback to file-based (ensure 4oundkey.json is in your /opt/render/project/src/ folder)
+    # Fallback to file-based
     db = firestore.Client()
 
 # -----------------------------------------------------
