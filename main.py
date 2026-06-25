@@ -72,21 +72,7 @@ if os.getenv('GOOGLE_APPLICATION_CREDENTIALS_JSON'):
 else:
     db = firestore.Client.from_service_account_json("4oundkey.json")
 
-# 🔍 DEBUG FIRESTORE
-try:
-    logger.info(f"Firestore project: {db.project}")
-    logger.info(
-        f"Using ENV credentials: {bool(os.getenv('GOOGLE_APPLICATION_CREDENTIALS_JSON'))}"
-    )
 
-    docs = db.collection("sessions").limit(1).get()
-
-    logger.info(
-        f"Firestore startup check passed. Docs found: {len(list(docs))}"
-    )
-
-except Exception as e:
-    logger.exception(f"❌ Firestore startup check FAILED: {e}")
 # -----------------------------------------------------
 # Uses project info from the JSON key
 FIRESTORE_OFFERS =  "listings"
@@ -110,6 +96,22 @@ processed_message_ids = set()
 # -------------------------
 logger = logging.getLogger("found_bot")
 logger.setLevel(logging.INFO)
+
+# 🔍 DEBUG FIRESTORE
+try:
+    logger.info(f"Firestore project: {db.project}")
+    logger.info(
+        f"Using ENV credentials: {bool(os.getenv('GOOGLE_APPLICATION_CREDENTIALS_JSON'))}"
+    )
+
+    docs = db.collection("sessions").limit(1).get()
+
+    logger.info(
+        f"Firestore startup check passed. Docs found: {len(list(docs))}"
+    )
+
+except Exception as e:
+    logger.exception(f"❌ Firestore startup check FAILED: {e}")
 
 # 1. Added encoding="utf-8" to handle emojis in the log file
 file_handler = RotatingFileHandler(
