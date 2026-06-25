@@ -133,7 +133,7 @@ try:
         f"Using ENV credentials: {bool(os.getenv('GOOGLE_APPLICATION_CREDENTIALS_JSON'))}"
     )
 
-    docs = db.collection("sessions").limit(1).get()
+    #docs = db.collection("sessions").limit(1).get()
 
     logger.info(
         f"Firestore startup check passed. Docs found: {len(list(docs))}"
