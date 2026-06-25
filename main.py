@@ -65,18 +65,23 @@ PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID") # You still need this one!
 # Make sure GOOGLE_APPLICATION_CREDENTIALS is set to 4oundkey.json
 # Do NOT need FIREBASE_PROJECT if using service account
 # --- Replace your old single line with this block ---
+# --- Replace your current initialization block with this ---
 if os.getenv('GOOGLE_APPLICATION_CREDENTIALS_JSON'):
     key_dict = json.loads(os.getenv('GOOGLE_APPLICATION_CREDENTIALS_JSON'))
 
-    print(
-        f"SERVICE ACCOUNT: {key_dict.get('client_email')}"
-    )
+    # Force the project ID from the JSON
+    project_id = key_dict.get('project_id')
+
+    print(f"DEBUG: Initializing Firestore for Project: {project_id}")
+    print(f"DEBUG: Client Email: {key_dict.get('client_email')}")
 
     creds = service_account.Credentials.from_service_account_info(key_dict)
-    db = firestore.Client(credentials=creds)
-else:
-    db = firestore.Client.from_service_account_json("4oundkey.json")
 
+    # Pass the project explicitly
+    db = firestore.Client(credentials=creds, project=project_id)
+else:
+    # Fallback to file-based (ensure 4oundkey.json is in your /opt/render/project/src/ folder)
+    db = firestore.Client()
 
 # -----------------------------------------------------
 # Uses project info from the JSON key
