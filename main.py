@@ -4451,7 +4451,6 @@ def resolve_category(intent: str, query: str = "") -> str:
         return "product"
     if intent in ["offer_job", "search_employment", "recruiter_onboarding"]:
         return "job"
-    # 🆕 ADD THIS HARD ROUTE
     if intent in ["search_service", "offer_service"]:
         return "service"
     if intent == "greeting":
@@ -4461,66 +4460,64 @@ def resolve_category(intent: str, query: str = "") -> str:
     keywords = {
         "job": {"job", "work", "hiring", "vacancy", "career", "apply", "employment", "recruitment", "intern", "salary"},
 
-        # 🔹 CLEANED: Keep only specific professions (High Confidence)
-        "service_professions": {"barber", "mechanic", "plumber", "repair", "cleaning", "delivery", "dispatch",
-                                "painter", "tutor", "driver", "tailor", "designer", "developer", "electrician",
-                                "salon", "laundry", "artisan", "tech", "person", "professional", "expert",
-                                "consultant"},
+        "service_professions": {
+            "barber", "mechanic", "plumber", "carpenter", "repair", "cleaning",
+            "delivery", "dispatch", "painter", "tutor", "driver", "tailor",
+            "designer", "developer", "electrician", "salon", "laundry", "artisan",
+            "tech", "professional", "expert", "consultant"
+        },
 
         "product": {
-    # Electronics
-    "phone", "laptop", "tv", "computer", "tablet", "camera", "radio",
-    "iphone", "samsung", "tecno", "infinix",
-    # Power
-    "generator", "inverter", "battery", "solar",
-    # Vehicles
-    "car", "bike", "motorcycle", "vehicle", "truck",
-    # Fashion
-    "shoe", "bag", "cloth", "shirt", "dress", "trouser", "sandal", "sneaker",
-    # Home
-    "furniture", "chair", "table", "bed", "mattress", "sofa", "fridge",
-    "freezer", "washing", "blender", "cooker", "stove",
-    # Food/consumables
-    "food", "cake", "bread", "rice", "oil",
-    # General
-    "item", "gadget", "buy", "sell", "price"
-},
+            # Electronics
+            "phone", "phones", "laptop", "laptops", "tv", "computer", "tablet",
+            "camera", "radio", "iphone", "samsung", "tecno", "infinix",
+            # Power
+            "generator", "inverter", "battery", "solar",
+            # Vehicles — removed "car" to prevent matching "carpenter"
+            "automobile", "vehicle", "truck", "motorcycle",
+            # Fashion — added plurals
+            "shoe", "shoes", "bag", "bags", "cloth", "clothes", "shirt", "shirts",
+            "dress", "dresses", "trouser", "trousers", "sandal", "sandals",
+            "sneaker", "sneakers",
+            # Home — kept furniture for "I need furniture" case
+            "furniture", "chair", "table", "bed", "mattress", "sofa", "fridge",
+            "freezer", "washing", "blender", "cooker", "stove",
+            # Food/consumables
+            "food", "cake", "bread", "rice", "oil",
+            # General
+            "item", "gadget", "buy", "sell", "price"
+        },
 
-        # 🔹 INTENT: These are the "triggers" that make the bot wake up
-        "intent_service": {"looking", "need", "find", "hire", "want", "search", "looking for", "service"}
+        "intent_service": {"looking", "need", "find", "hire", "want", "search", "service"}
     }
 
     # 4. TIER 3: PRIORITY LOGIC
     # A. Check for Job Intent
-    if (words & keywords["job"]):
+    if words & keywords["job"]:
         return "job"
 
     # B. Check for Service Intent
-    # Only classify as "service" if it's a specific profession OR if the word "service" is used with intent
     is_prof = bool(words & keywords["service_professions"])
+    is_maker = "maker" in words  # ✅ "furniture maker", "shoe maker" etc = service
     is_service_intent = bool(words & {"service"}) and bool(words & keywords["intent_service"])
 
-    if is_prof or is_service_intent:
+    if is_prof or is_service_intent or is_maker:
         return "service"
 
-    # C. Check for Product
-    if words & keywords["product"] or any(
-            any(kw in w for kw in keywords["product"])
-            for w in words
-    ):
+    # C. Check for Product — exact word match only ✅
+    # Removed substring matching that caused "car" to match "carpenter"
+    if words & keywords["product"]:
         return "product"
 
     # 5. TIER 4: FALLBACKS
-    # If the intent is 'search' but keywords are ambiguous, default to service
-    # as it's safer for 4ound's AI goals than pushing products blindly.
     if intent == "search":
-        # Check if query contains any product-like signals
         product_signals = ["buy", "sell", "price", "cost", "cheap", "new", "used", "brand"]
         if any(signal in query_lower for signal in product_signals):
             return "product"
         return "service"
 
-    return "product"
+    # ✅ Safer fallback — most 4ound searches are for services
+    return "service"
 
 
 def edit_message(phone_number_id, to_number, message_id, new_text):
@@ -6377,31 +6374,55 @@ def handle_whatsapp_logic(data):
 
                             # CASE C: Employment Search (Job Seekers)
                             elif predicted_intent == "search_employment":
-                                service_keywords = ["plumber", "mechanic", "tailor", "cleaner", "doctor", "barber",
-                                                    "carpenter"]
-                                # 🆕 ADD THESE:
-                                product_keywords = ["shoes", "clothes", "sneakers", "bags", "laptop", "watch", "phone",
-                                                    "iphone", "furniture"]
-                                user_text_low = text.lower()
 
-                                # 🛡️ THE PRODUCT REDIRECT (The Fix for Shoes)
-                                if any(k in user_text_low for k in product_keywords):
+                                import re
+
+                                service_keywords = {
+                                    "plumber", "mechanic", "tailor", "cleaner", "doctor",
+                                    "barber", "carpenter", "electrician", "painter",
+                                    "welder", "engineer", "developer", "designer",
+                                    "photographer", "chef", "driver", "nurse",
+                                    "teacher", "tutor", "lawyer", "accountant",
+                                    "tiler", "bricklayer", "fumigator"
+                                }
+
+                                product_keywords = {
+                                    "shoes", "clothes", "sneakers",
+                                    "bags", "laptop", "watch",
+                                    "phone", "iphone"
+                                    # furniture removed intentionally
+                                }
+
+                                text_words = set(
+                                    re.findall(r"\b\w+\b", text.lower())
+                                )
+
+                                # 🛡️ PRODUCT REDIRECT
+                                if text_words & product_keywords:
                                     logger.info(f"🔄 Redirecting Product Request: {text} -> MARKET_SEARCH")
-                                    session["mode"] = "MARKET_SEARCH"  # 👈 Force change session
-                                    predicted_intent = "search"
-                                    session["category"] = "product"  # 👈 Explicitly set category
 
-                                # Existing Service Redirect
-                                elif any(k in user_text_low for k in service_keywords):
-                                    logger.info(f"🔄 Redirecting Service Request: {text} -> MARKET_SEARCH")
                                     session["mode"] = "MARKET_SEARCH"
+                                    session["category"] = "product"
+
                                     predicted_intent = "search"
+
+                                # 🛡️ SERVICE REDIRECT
+                                elif text_words & service_keywords:
+                                    logger.info(f"🔄 Redirecting Service Request: {text} -> MARKET_SEARCH")
+
+                                    session["mode"] = "MARKET_SEARCH"
+                                    session["category"] = "service"
+
+                                    predicted_intent = "search"
+
                                 else:
                                     session["mode"] = "EMPLOYMENT_SEARCH"
-                                    logger.info(f"🕵️ Job Seeker confirmed")
+                                    logger.info("🕵️ Job Seeker confirmed")
 
                                 session["query_item"] = session.get("job_query") or text
+
                                 commit_session(from_number, session)
+
                                 predicted_intent = "search"
 
 
