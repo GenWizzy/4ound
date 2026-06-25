@@ -63,30 +63,21 @@ META_TEST_NUMBER = os.getenv("META_TEST_NUMBER", "+15551903534")
 FOURSQUARE_SERVICE_KEY = os.getenv("FOURSQUARE_SERVICE_KEY")
 WHATSAPP_TOKEN = ACCESS_TOKEN
 PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID") # You still need this one!
-# --- Updated Initialization Block ---
-if os.getenv('GOOGLE_APPLICATION_CREDENTIALS_JSON'):
-    # 1. Get the base64 string
-    encoded_creds = os.getenv('GOOGLE_APPLICATION_CREDENTIALS_JSON')
+raw_creds = os.getenv('GOOGLE_APPLICATION_CREDENTIALS_JSON')
 
-    # 2. Decode it from base64 back into raw JSON string
-    decoded_json = base64.b64decode(encoded_creds)
-
-    # 3. Parse the JSON
+if raw_creds:
+    # Decode and initialize
+    decoded_json = base64.b64decode(raw_creds)
     key_dict = json.loads(decoded_json)
-
-    # Force the project ID from the JSON
+    creds = service_account.Credentials.from_service_account_info(key_dict)
     project_id = key_dict.get('project_id')
 
-    print(f"DEBUG: Initializing Firestore for Project: {project_id}")
-    print(f"DEBUG: Client Email: {key_dict.get('client_email')}")
-
-    creds = service_account.Credentials.from_service_account_info(key_dict)
-
-    # Pass the project explicitly
-    db = firestore.Client(credentials=creds, project=project_id)
+    # Initialize Client
+    db = firestore.Client(credentials=creds, project=project_id, database="(default)")
+    print("DEBUG: Firestore Client initialized.")
 else:
-    # Fallback to file-based
-    db = firestore.Client()
+    print("ERROR: GOOGLE_APPLICATION_CREDENTIALS_JSON is missing!")
+    db = firestore.Client()  # Fallback
 
 # -----------------------------------------------------
 # Uses project info from the JSON key
