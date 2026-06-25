@@ -1295,15 +1295,33 @@ def get_db():
         # 1. Try JSON string from ENV
         if key_json_str:
             logger.info("🔐 Loading Firestore credentials from JSON ENV variable.")
-            # If the string looks like Base64 (usually ends with == or has no spaces), decode it
+
             try:
-                # Attempt to decode if it's base64
                 if not key_json_str.strip().startswith('{'):
                     key_json_str = base64.b64decode(key_json_str).decode('utf-8')
 
                 key_dict = json.loads(key_json_str)
+
+                logger.info(f"AUTH EMAIL: {key_dict.get('client_email')}")
+                logger.info(f"AUTH PROJECT: {key_dict.get('project_id')}")
+                logger.info(f"AUTH KEY ID: {key_dict.get('private_key_id')}")
+
                 creds = service_account.Credentials.from_service_account_info(key_dict)
-                _db = firestore.Client(project=project or creds.project_id, credentials=creds)
+
+                _db = firestore.Client(
+                    project=project or creds.project_id,
+                    credentials=creds
+                )
+
+                logger.info(f"DB project: {_db.project}")
+                logger.info(f"FIRESTORE_PROJECT ENV: {os.getenv('FIRESTORE_PROJECT')}")
+
+                try:
+                    collections = list(_db.collections())
+                    logger.info(f"Collections visible: {len(collections)}")
+                except Exception as e:
+                    logger.exception(f"COLLECTION TEST FAILED: {e}")
+
             except Exception as e:
                 logger.error(f"Failed to load credentials from JSON ENV: {e}")
                 raise
