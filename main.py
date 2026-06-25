@@ -1295,9 +1295,18 @@ def get_db():
         # 1. Try JSON string from ENV
         if key_json_str:
             logger.info("🔐 Loading Firestore credentials from JSON ENV variable.")
-            key_dict = json.loads(key_json_str)
-            creds = service_account.Credentials.from_service_account_info(key_dict)
-            _db = firestore.Client(project=project or creds.project_id, credentials=creds)
+            # If the string looks like Base64 (usually ends with == or has no spaces), decode it
+            try:
+                # Attempt to decode if it's base64
+                if not key_json_str.strip().startswith('{'):
+                    key_json_str = base64.b64decode(key_json_str).decode('utf-8')
+
+                key_dict = json.loads(key_json_str)
+                creds = service_account.Credentials.from_service_account_info(key_dict)
+                _db = firestore.Client(project=project or creds.project_id, credentials=creds)
+            except Exception as e:
+                logger.error(f"Failed to load credentials from JSON ENV: {e}")
+                raise
 
         # 2. Try file path from ENV
         elif key_path and os.path.exists(key_path):
