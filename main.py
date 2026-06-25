@@ -127,20 +127,20 @@ logger.addHandler(console_handler)
 
 
 # 🔍 DEBUG FIRESTORE
-try:
-    logger.info(f"Firestore project: {db.project}")
-    logger.info(
-        f"Using ENV credentials: {bool(os.getenv('GOOGLE_APPLICATION_CREDENTIALS_JSON'))}"
-    )
+#try:
+    #logger.info(f"Firestore project: {db.project}")
+    #logger.info(
+       # f"Using ENV credentials: {bool(os.getenv('GOOGLE_APPLICATION_CREDENTIALS_JSON'))}"
+    #)
 
     #docs = db.collection("sessions").limit(1).get()
 
-    logger.info(
-        f"Firestore startup check passed. Docs found: {len(list(docs))}"
-    )
+    #logger.info(
+    #    f"Firestore startup check passed. Docs found: {len(list(docs))}"
+    #)
 
-except Exception as e:
-    logger.exception(f"❌ Firestore startup check FAILED: {e}")
+#except Exception as e:
+    #logger.exception(f"❌ Firestore startup check FAILED: {e}")
 
 
 
