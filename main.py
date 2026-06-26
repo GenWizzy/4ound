@@ -6428,8 +6428,6 @@ def handle_whatsapp_logic(data):
                             # CASE C: Employment Search (Job Seekers)
                             elif predicted_intent == "search_employment":
 
-                                import re
-
                                 service_keywords = {
                                     "plumber", "mechanic", "tailor", "cleaner", "doctor",
                                     "barber", "carpenter", "electrician", "painter",
@@ -6446,9 +6444,8 @@ def handle_whatsapp_logic(data):
                                     # furniture removed intentionally
                                 }
 
-                                text_words = set(
-                                    re.findall(r"\b\w+\b", text.lower())
-                                )
+                                # ✅ Simple split — avoids re module shadowing issue
+                                text_words = set(text.lower().split())
 
                                 # 🛡️ PRODUCT REDIRECT
                                 if text_words & product_keywords:
