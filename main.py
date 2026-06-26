@@ -35,6 +35,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 from google.oauth2 import service_account
 from google.api_core.datetime_helpers import DatetimeWithNanoseconds as Timestamp
+from google.api_core import client_options
 
 
 
@@ -1277,8 +1278,6 @@ def save_advert_to_db(ad_data):
         return False
 
 
-
-
 def get_db():
     global _db
     if _db is not None:
@@ -1289,56 +1288,49 @@ def get_db():
             return _db
 
         project = os.getenv("FIRESTORE_PROJECT")
-        key_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
         key_json_str = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
 
-        # 1. Try JSON string from ENV
         if key_json_str:
             logger.info("🔐 Loading Firestore credentials from JSON ENV variable.")
-
             try:
-                if not key_json_str.strip().startswith('{'):
-                    key_json_str = base64.b64decode(key_json_str).decode('utf-8')
+                # Clean the input: ensure no extra quotes or newlines
+                clean_json = key_json_str.strip().strip("'").strip('"')
 
-                key_dict = json.loads(key_json_str)
+                if not clean_json.startswith('{'):
+                    clean_json = base64.b64decode(clean_json).decode('utf-8')
+
+                key_dict = json.loads(clean_json)
+
+                # FORCE the project ID from the JSON file itself to avoid mismatches
+                target_project = key_dict.get('project_id')
 
                 logger.info(f"AUTH EMAIL: {key_dict.get('client_email')}")
-                logger.info(f"AUTH PROJECT: {key_dict.get('project_id')}")
-                logger.info(f"AUTH KEY ID: {key_dict.get('private_key_id')}")
+                logger.info(f"Targeting Project: {target_project}")
 
                 creds = service_account.Credentials.from_service_account_info(key_dict)
 
+                # Initialize with explicit project and credentials
                 _db = firestore.Client(
-                    project=project or creds.project_id,
+                    project=target_project,
                     credentials=creds
                 )
 
-                logger.info(f"DB project: {_db.project}")
-                logger.info(f"FIRESTORE_PROJECT ENV: {os.getenv('FIRESTORE_PROJECT')}")
+                logger.info(f"Firestore Client successfully initialized for: {_db.project}")
 
+                # REPLACED COLLECTION TEST: list() can be privileged.
+                # Try reading one document to verify access without needing broad 'list' permissions.
                 try:
-                    collections = list(_db.collections())
-                    logger.info(f"Collections visible: {len(collections)}")
+                    # Change 'listings' to any collection you know exists
+                    doc_count = len(list(_db.collection("listings").limit(1).stream()))
+                    logger.info("✅ Connection Verified: Successfully read from Firestore.")
                 except Exception as e:
-                    logger.exception(f"COLLECTION TEST FAILED: {e}")
+                    logger.error(f"❌ Connection Test Failed: {e}")
 
             except Exception as e:
-                logger.error(f"Failed to load credentials from JSON ENV: {e}")
+                logger.error(f"Critical error initializing Firestore: {e}")
                 raise
-
-        # 2. Try file path from ENV
-        elif key_path and os.path.exists(key_path):
-            creds = service_account.Credentials.from_service_account_file(key_path)
-            _db = firestore.Client(project=project or creds.project_id, credentials=creds)
-
-        # 3. Fallback to local file
-        elif os.path.exists("4oundkey.json"):
-            creds = service_account.Credentials.from_service_account_file("4oundkey.json")
-            _db = firestore.Client(project=project or creds.project_id, credentials=creds)
-
-        # 4. Final attempt
         else:
-            _db = firestore.Client(project=project) if project else firestore.Client()
+            raise Exception("Environment variable GOOGLE_APPLICATION_CREDENTIALS_JSON is missing!")
 
         return _db
 
